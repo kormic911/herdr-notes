@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub auto_open: bool,
     pub follow_tabs: bool,
+    pub remember_width: bool,
     pub width_columns: u16,
 }
 
@@ -15,6 +16,7 @@ impl Default for Config {
         Self {
             auto_open: false,
             follow_tabs: true,
+            remember_width: true,
             width_columns: 42,
         }
     }

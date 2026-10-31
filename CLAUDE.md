@@ -78,6 +78,10 @@ while the TUI is running in a pane — quit/close the pane first (and
 
 ### Workspace following (fork, verified against Herdr 0.9.3)
 
+- Width samples must ignore tab changes, viewport resizing, and zoom transitions.
+  Store layout preferences separately from note content (`layout-<workspace>.json`).
+  Herdr split ratios are quantized to columns; retain four decimals to avoid drift.
+
 - User options live in `HERDR_PLUGIN_CONFIG_DIR/config.json`: `auto_open`,
   `follow_tabs`, and `width_columns`. Split launchers must pass this directory
   into the editor along with `HERDR_PLUGIN_STATE_DIR`.

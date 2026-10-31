@@ -127,7 +127,7 @@ pub fn run() -> io::Result<()> {
         }
         let plan = crate::launch::open_plan_with_width(
             &json!({"result":layout}).to_string(),
-            config.width_columns.into(),
+            crate::width::preferred(&workspace, &config),
         );
         let Some((target, ratio)) = plan.split_once('\t') else {
             continue;

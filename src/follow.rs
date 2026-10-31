@@ -80,7 +80,7 @@ pub fn reconcile(pane_id: &str, workspace: &str) -> std::io::Result<()> {
     reconcile_with_width(
         pane_id,
         workspace,
-        config.width_columns.into(),
+        crate::width::preferred(workspace, &config),
         crate::ipc::call_text,
     )
 }
@@ -150,8 +150,10 @@ pub fn start() {
     let _ = std::thread::Builder::new()
         .name("workspace-notes".into())
         .spawn(move || {
+            let mut width = crate::width::Observer::default();
             loop {
                 std::thread::sleep(Duration::from_millis(500));
+                let _ = width.capture(&pane, &workspace);
                 let _ = reconcile(&pane, &workspace);
             }
         });

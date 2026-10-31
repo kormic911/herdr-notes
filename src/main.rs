@@ -13,6 +13,7 @@ mod ipc;
 mod launch;
 mod markdown;
 mod state;
+mod width;
 
 use std::io::Read;
 use std::time::Duration;
@@ -37,7 +38,10 @@ fn main() -> std::io::Result<()> {
             return Ok(());
         }
         Some("--launch-decision") => {
-            println!("{}", launch::launch_decision(&read_stdin()?, state::unix_now()));
+            println!(
+                "{}",
+                launch::launch_decision(&read_stdin()?, state::unix_now())
+            );
             return Ok(());
         }
         Some("--focused-pane") => {
@@ -46,7 +50,16 @@ fn main() -> std::io::Result<()> {
         }
         Some("--open-plan") => {
             let config = config::load()?;
-            println!("{}", launch::open_plan_with_width(&read_stdin()?, config.width_columns.into()));
+            println!(
+                "{}",
+                launch::open_plan_with_width(
+                    &read_stdin()?,
+                    width::preferred(
+                        &std::env::var("HERDR_WORKSPACE_ID").unwrap_or_default(),
+                        &config
+                    )
+                )
+            );
             return Ok(());
         }
         Some("--stamp") => {

@@ -41,7 +41,20 @@ def wait_for(predicate, description):
     raise AssertionError(description)
 
 
-with tempfile.TemporaryDirectory(prefix="herdr-notes-test-") as directory:
+class TestDirectory(tempfile.TemporaryDirectory):
+    def cleanup(self):
+        # Windows child shells may release inherited log handles just after
+        # the isolated server exits.
+        for attempt in range(50):
+            try:
+                return super().cleanup()
+            except PermissionError:
+                if attempt == 49:
+                    raise
+                time.sleep(0.1)
+
+
+with TestDirectory(prefix="herdr-notes-test-") as directory:
     # Isolate the plugin registry too: globally installed startup hooks must
     # never run against real note files during this test.
     env["XDG_CONFIG_HOME"] = str(Path(directory) / "config-home")
@@ -97,14 +110,27 @@ with tempfile.TemporaryDirectory(prefix="herdr-notes-test-") as directory:
             assert next(p for p in panes() if p["focused"])["pane_id"] == original
             cli("pane", "send-keys", notes, "e")
             cli("pane", "send-text", notes, "unsaved text survives tab switches")
+            def note_width(pane):
+                layout = cli("pane", "layout", "--pane", pane)["layout"]
+                return next(p["rect"]["width"] for p in layout["panes"] if p["pane_id"] == pane)
+            time.sleep(0.7)  # Establish the observer's initial layout.
+            before_width = note_width(notes)
+            cli("pane", "resize", "--pane", notes, "--direction", "left", "--amount", "0.1")
+            resized_width = note_width(notes)
+            assert resized_width != before_width, (before_width, resized_width)
+            width_file = state / f"layout-{workspace}.json"
+            wait_for(lambda: width_file.exists() and json.loads(width_file.read_text())["width_columns"] == resized_width,
+                     "Resized width was not persisted")
             second = cli("tab", "create", "--workspace", workspace, "--cwd", directory, "--focus")
             target = second["tab"]["tab_id"]
             wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tab_id"] == target,
                      "Notes did not follow the new tab")
+            assert abs(note_width(notes) - resized_width) <= 1, (note_width(notes), resized_width)
             assert not next(p for p in panes() if p["pane_id"] == notes)["focused"], "Notes stole focus"
             cli("tab", "focus", first)
             wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tab_id"] == first,
                      "Notes did not return to the first tab")
+            assert abs(note_width(notes) - resized_width) <= 1
             other = cli("workspace", "create", "--label", "other-test", "--cwd", directory, "--focus")
             wait_for(lambda: len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 2,
                      "workspace.created hook did not auto-open Notes")
@@ -142,7 +168,10 @@ with tempfile.TemporaryDirectory(prefix="herdr-notes-test-") as directory:
             wait_for(ready, "Isolated server did not restart")
             wait_for(lambda: len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 2,
                      "Startup hook did not restore both workspace editors")
-            print("PASS: configurable auto-open, idempotence, restored shells, tab following, focus, workspace isolation and saved text")
+            restored = next(p["pane_id"] for p in panes() if p["workspace_id"] == workspace and
+                            "herdr-notes" in p.get("tokens", {}))
+            assert abs(note_width(restored) - resized_width) <= 1
+            print("PASS: remembered width across tabs and restart, configurable auto-open, idempotence, restored shells, tab following, focus, workspace isolation and saved text")
         finally:
             # This server was created by this test; never stop the default session.
             subprocess.run(prefix + ["server", "stop"], env=env, capture_output=True, timeout=10)

@@ -76,6 +76,7 @@ point. For one shared workspace note that opens automatically and follows tabs:
 {
   "auto_open": true,
   "follow_tabs": true,
+  "remember_width": true,
   "width_columns": 42
 }
 ```
@@ -84,10 +85,13 @@ point. For one shared workspace note that opens automatically and follows tabs:
 | --- | --- | --- |
 | `auto_open` | `false` | Open one Notes editor per workspace at server startup and when a workspace is created |
 | `follow_tabs` | `true` | Move that editor to the selected tab within its workspace |
+| `remember_width` | `true` | Remember resized Notes width per workspace, including after restart |
 | `width_columns` | `42` | Preferred width, from 20 to 160 columns; constrained by available layout space |
 
+Notes remembers pane resizes within about half a second. The saved width is reused when switching tabs or reopening Notes; `width_columns` is the starting width until you resize. Smaller layouts constrain the displayed width without replacing the saved preference. Set `remember_width` to `false` to always use the configured width.
+
 Settings survive plugin reinstalls. Tab following reads changes automatically;
-width changes apply on the next open or move. Turning `auto_open` off leaves
+configured width changes apply on the next open or move when no remembered width overrides them. Turning `auto_open` off leaves
 existing editors open. Closing Notes manually keeps it closed until the next
 startup, workspace creation, or explicit application of settings.
 
