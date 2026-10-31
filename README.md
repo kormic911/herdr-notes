@@ -66,6 +66,46 @@ are preserved. Do not run both versions against the same workspace note.
 
 ## Open
 
+### Automatic opening and settings
+
+Run `herdr plugin config-dir herdr-notes` to find the settings directory. Create
+`config.json` there, using [config.example.json](config.example.json) as a starting
+point. For one shared workspace note that opens automatically and follows tabs:
+
+```json
+{
+  "auto_open": true,
+  "follow_tabs": true,
+  "width_columns": 42
+}
+```
+
+| Setting | Default | Behavior |
+| --- | --- | --- |
+| `auto_open` | `false` | Open one Notes editor per workspace at server startup and when a workspace is created |
+| `follow_tabs` | `true` | Move that editor to the selected tab within its workspace |
+| `width_columns` | `42` | Preferred width, from 20 to 160 columns; constrained by available layout space |
+
+Settings survive plugin reinstalls. Tab following reads changes automatically;
+width changes apply on the next open or move. Turning `auto_open` off leaves
+existing editors open. Closing Notes manually keeps it closed until the next
+startup, workspace creation, or explicit application of settings.
+
+To open Notes for existing workspaces immediately, without restarting Herdr:
+
+```sh
+herdr plugin action invoke herdr-notes.apply-settings-windows  # Windows
+herdr plugin action invoke herdr-notes.apply-settings          # Linux/macOS
+```
+
+Herdr runs startup hooks when its **server starts**, not every time a terminal
+reattaches to an already-running server. The workspace-created hook handles new
+workspaces while it is running. Automatic opening preserves keyboard focus,
+avoids duplicate editors, and skips zoomed layouts. Unknown or invalid settings
+are errors rather than silently reverting to defaults.
+
+### Manual toggle
+
 One toggle action opens the workspace's notes on the right, focuses the existing
 editor if open, and closes it if already focused:
 

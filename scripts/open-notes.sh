@@ -70,6 +70,7 @@ open_pane() {
   out="$("$herdr_bin" pane split "$target" --direction right --ratio "$ratio" \
     ${fcwd:+--cwd "$fcwd"} \
     ${HERDR_PLUGIN_STATE_DIR:+--env "HERDR_PLUGIN_STATE_DIR=$HERDR_PLUGIN_STATE_DIR"} \
+    ${HERDR_PLUGIN_CONFIG_DIR:+--env "HERDR_PLUGIN_CONFIG_DIR=$HERDR_PLUGIN_CONFIG_DIR"} \
     --no-focus 2>/dev/null || true)"
   np="$(printf '%s' "$out" | sed -n 's/.*"pane_id":"\([^"]*\)".*/\1/p' | head -n1)"
   [ -n "$np" ] || exit 1

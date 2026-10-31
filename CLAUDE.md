@@ -78,6 +78,18 @@ while the TUI is running in a pane — quit/close the pane first (and
 
 ### Workspace following (fork, verified against Herdr 0.9.3)
 
+- User options live in `HERDR_PLUGIN_CONFIG_DIR/config.json`: `auto_open`,
+  `follow_tabs`, and `width_columns`. Split launchers must pass this directory
+  into the editor along with `HERDR_PLUGIN_STATE_DIR`.
+- `--auto-open` is a one-shot reconciler for startup and `workspace.created`.
+  A file lock serializes hooks; healthy existing editors are left intact and
+  restored Notes shells are recovered. Explicit pane IDs and `--no-focus`
+  prevent hooks from hijacking keyboard focus. Startup is server startup,
+  not client attachment; the apply-settings action handles a running session.
+- Integration tests set both `XDG_CONFIG_HOME` and `XDG_STATE_HOME` to temporary
+  directories before linking the plugin. A named session alone is NOT enough
+  isolation once global plugin startup hooks can automatically open notes.
+
 - Herdr has no native workspace dock. `src/follow.rs` reconciles the running
   editor with the active tab every 500ms on a process-owned thread. It moves
   the existing PTY with `pane.move` and `focus: false`; no second writer or

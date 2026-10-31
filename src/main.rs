@@ -6,6 +6,8 @@
 //! launch.rs.
 
 mod app;
+mod auto_open;
+mod config;
 mod follow;
 mod ipc;
 mod launch;
@@ -19,6 +21,12 @@ use crossterm::event::{self, Event};
 
 fn main() -> std::io::Result<()> {
     match std::env::args().nth(1).as_deref() {
+        Some("--auto-open") => return auto_open::run(),
+        Some("--check-config") => {
+            let config = config::load()?;
+            println!("{}", serde_json::to_string_pretty(&config)?);
+            return Ok(());
+        }
         Some("--follow") => {
             let Some(pane_id) = std::env::args().nth(2) else {
                 return Err(std::io::Error::other("--follow requires a pane id"));
@@ -37,7 +45,8 @@ fn main() -> std::io::Result<()> {
             return Ok(());
         }
         Some("--open-plan") => {
-            println!("{}", launch::open_plan(&read_stdin()?));
+            let config = config::load()?;
+            println!("{}", launch::open_plan_with_width(&read_stdin()?, config.width_columns.into()));
             return Ok(());
         }
         Some("--stamp") => {
@@ -57,13 +66,14 @@ fn main() -> std::io::Result<()> {
         Some(other) => {
             eprintln!("herdr-notes: unknown argument `{other}`");
             eprintln!(
-                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>|--follow <pane-id>]"
+                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>|--follow <pane-id>|--auto-open|--check-config]"
             );
             std::process::exit(2);
         }
         None => {}
     }
 
+    config::load()?;
     let mut terminal = ratatui::init();
     let mut app = app::App::new();
     follow::start();

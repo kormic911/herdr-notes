@@ -23,6 +23,7 @@ use serde::Deserialize;
 use crate::state::{note_key, METADATA_SOURCE, PANE_LABEL};
 
 /// Preferred notes width in columns; the ratio is derived from the target pane.
+#[cfg(test)]
 const TARGET_COLS: f64 = 42.0;
 
 /// A live TUI re-stamps its identity token every few seconds; a token older
@@ -183,7 +184,12 @@ pub fn focused_pane(pane_list_json: &str) -> String {
 /// `<pane_id>\t<ratio>` for the right dock: the RIGHTMOST pane of the layout
 /// and the share the ORIGINAL pane keeps so Notes gets ~[`TARGET_COLS`]
 /// columns on the right edge. Empty on any failure.
+#[cfg(test)]
 pub fn open_plan(layout_json: &str) -> String {
+    open_plan_with_width(layout_json, TARGET_COLS)
+}
+
+pub fn open_plan_with_width(layout_json: &str, width_columns: f64) -> String {
     let Ok(msg) = serde_json::from_str::<LayoutMsg>(strip_bom(layout_json)) else {
         return String::new();
     };
@@ -207,7 +213,7 @@ pub fn open_plan(layout_json: &str) -> String {
     let Some((id, rect)) = best else {
         return String::new();
     };
-    let notes_share = (TARGET_COLS / rect.width as f64).clamp(0.15, 0.5);
+    let notes_share = (width_columns / rect.width as f64).clamp(0.15, 0.5);
     let ratio = 1.0 - notes_share;
     format!("{id}\t{ratio:.2}")
 }

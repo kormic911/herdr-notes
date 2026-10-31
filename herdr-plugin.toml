@@ -12,13 +12,43 @@
 
 id = "herdr-notes"
 name = "herdr-notes"
-version = "0.2.0"
+version = "0.3.0"
 description = "Persistent markdown notes pane: one scrollable note with preview/edit, autosaved across restarts."
 min_herdr_version = "0.9.3"
 platforms = ["linux", "macos", "windows"]
 
 [[build]]
 command = ["cargo", "build", "--release"]
+
+[[startup]]
+platforms = ["windows"]
+command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
+
+[[startup]]
+platforms = ["linux", "macos"]
+command = ["./target/release/herdr-notes", "--auto-open"]
+
+[[events]]
+on = "workspace.created"
+platforms = ["windows"]
+command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
+
+[[events]]
+on = "workspace.created"
+platforms = ["linux", "macos"]
+command = ["./target/release/herdr-notes", "--auto-open"]
+
+[[actions]]
+id = "apply-settings-windows"
+title = "Apply Notes settings"
+platforms = ["windows"]
+command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
+
+[[actions]]
+id = "apply-settings"
+title = "Apply Notes settings"
+platforms = ["linux", "macos"]
+command = ["./target/release/herdr-notes", "--auto-open"]
 
 # Declarative pane entry — usable on linux/macos (`plugin pane open`) and as
 # the unix launcher's fallback. Unspawnable on Windows (relative command).

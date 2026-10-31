@@ -89,6 +89,7 @@ function Open-Pane {
     # Actions receive it; panes made via `pane split` do not — pass it through
     # so the TUI stores notes there (state.rs falls back to the config dir).
     if ($env:HERDR_PLUGIN_STATE_DIR) { $splitArgs += @('--env', "HERDR_PLUGIN_STATE_DIR=$env:HERDR_PLUGIN_STATE_DIR") }
+    if ($env:HERDR_PLUGIN_CONFIG_DIR) { $splitArgs += @('--env', "HERDR_PLUGIN_CONFIG_DIR=$env:HERDR_PLUGIN_CONFIG_DIR") }
     $out = (& $HerdrBin @splitArgs | Out-String)
     $np = Get-PaneId $out
     if (-not $np) { exit 1 }

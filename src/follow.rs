@@ -73,12 +73,31 @@ fn destination(snapshot: &str, pane_id: &str, workspace: &str) -> Option<Destina
 /// move the note into a tab the user has already left. `focus: false` preserves
 /// the terminal they are typing in. Zoomed tabs are refused by Herdr itself.
 pub fn reconcile(pane_id: &str, workspace: &str) -> std::io::Result<()> {
-    reconcile_with(pane_id, workspace, crate::ipc::call_text)
+    let config = crate::config::load()?;
+    if !config.follow_tabs {
+        return Ok(());
+    }
+    reconcile_with_width(
+        pane_id,
+        workspace,
+        config.width_columns.into(),
+        crate::ipc::call_text,
+    )
 }
 
+#[cfg(test)]
 fn reconcile_with(
     pane_id: &str,
     workspace: &str,
+    call: impl FnMut(&str, Value) -> std::io::Result<String>,
+) -> std::io::Result<()> {
+    reconcile_with_width(pane_id, workspace, 42.0, call)
+}
+
+fn reconcile_with_width(
+    pane_id: &str,
+    workspace: &str,
+    width_columns: f64,
     mut call: impl FnMut(&str, Value) -> std::io::Result<String>,
 ) -> std::io::Result<()> {
     let snapshot = call("pane.list", json!({}))?;
@@ -86,7 +105,7 @@ fn reconcile_with(
         return Ok(());
     };
     let layout = call("pane.layout", json!({"pane_id": plan.focused}))?;
-    let placement = crate::launch::open_plan(&layout);
+    let placement = crate::launch::open_plan_with_width(&layout, width_columns);
     let Some((target, ratio)) = placement.split_once('\t') else {
         return Ok(());
     };
