@@ -76,6 +76,22 @@ while the TUI is running in a pane — quit/close the pane first (and
 
 ## Gotchas (verified against herdr 0.7.1)
 
+### Workspace following (fork, verified against Herdr 0.9.3)
+
+- Herdr has no native workspace dock. `src/follow.rs` reconciles the running
+  editor with the active tab every 500ms on a process-owned thread. It moves
+  the existing PTY with `pane.move` and `focus: false`; no second writer or
+  detached daemon is created. Explicit action invocations reconcile before focus.
+- Re-read focus after layout planning. Skip other workspaces, missing IDs,
+  duplicate editor tokens, same-tab moves, and source tabs with only the Notes
+  pane (moving it would close that tab). Herdr refuses zoomed-tab moves; retry
+  later. Multiple attached clients share server-wide focus.
+- `python tools/test_workspace_follow.py` creates and stops only its own named
+  server and uses a temporary note directory. It exercises tab switches,
+  workspace isolation, preserved typing focus, and saved text after moving.
+- On Scoop installations, add the actual Rust `bin` directory to PATH for
+  `cargo clippy`; having only the cargo shim does not expose cargo-clippy.
+
 Inherited from the sidebar plugin's findings:
 
 - Windows herdr can NOT spawn a relative `[[panes]]` command (resolves against

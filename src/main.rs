@@ -6,6 +6,7 @@
 //! launch.rs.
 
 mod app;
+mod follow;
 mod ipc;
 mod launch;
 mod markdown;
@@ -18,6 +19,15 @@ use crossterm::event::{self, Event};
 
 fn main() -> std::io::Result<()> {
     match std::env::args().nth(1).as_deref() {
+        Some("--follow") => {
+            let Some(pane_id) = std::env::args().nth(2) else {
+                return Err(std::io::Error::other("--follow requires a pane id"));
+            };
+            if let Ok(workspace) = std::env::var("HERDR_WORKSPACE_ID") {
+                follow::reconcile(&pane_id, &workspace)?;
+            }
+            return Ok(());
+        }
         Some("--launch-decision") => {
             println!("{}", launch::launch_decision(&read_stdin()?, state::unix_now()));
             return Ok(());
@@ -47,7 +57,7 @@ fn main() -> std::io::Result<()> {
         Some(other) => {
             eprintln!("herdr-notes: unknown argument `{other}`");
             eprintln!(
-                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>]"
+                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>|--follow <pane-id>]"
             );
             std::process::exit(2);
         }
@@ -56,6 +66,7 @@ fn main() -> std::io::Result<()> {
 
     let mut terminal = ratatui::init();
     let mut app = app::App::new();
+    follow::start();
     let result = run(&mut terminal, &mut app);
     app.finalize();
     ratatui::restore();

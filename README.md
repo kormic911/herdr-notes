@@ -4,14 +4,17 @@
 
 ### The scratch note that lives beside your agents.
 
-One markdown note per workspace in a dockable [herdr](https://github.com/ogulcancelik/herdr)
-pane — rendered preview, plain-text editing, and it never forgets: everything
-autosaves and survives computer restarts.
+One markdown note per workspace in a [Herdr](https://github.com/herdrdev/herdr)
+pane that follows you between tabs. The same editor stays running, preserving
+your cursor, edit mode and unsaved text. Notes autosave and survive restarts.
+
+This is a fork of [alexarthurs/herdr-notes](https://github.com/alexarthurs/herdr-notes)
+with automatic workspace tab following. Requires Herdr 0.9.3 or newer.
 
 <img alt="Rust" src="https://img.shields.io/badge/Rust-self--contained_crate-orange?logo=rust&logoColor=white">
-<img alt="herdr" src="https://img.shields.io/badge/herdr-%E2%89%A5%200.7-5865a3">
+<img alt="herdr" src="https://img.shields.io/badge/herdr-%E2%89%A5%200.9.3-5865a3">
 <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-2ea44f">
-<img alt="CI" src="https://github.com/alexarthurs/herdr-notes/actions/workflows/ci.yml/badge.svg">
+<img alt="CI" src="https://github.com/kormic911/herdr-notes/actions/workflows/ci.yml/badge.svg">
 <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
 
 <br><br>
@@ -27,7 +30,7 @@ This gives them a permanent home one keypress away: no editor window, no stray
 `notes.txt`, no saving.
 
 ```
-herdr plugin install alexarthurs/herdr-notes
+herdr plugin install kormic911/herdr-notes
 ```
 
 ---
@@ -57,15 +60,47 @@ herdr plugin link .
 
 Or straight from GitHub with the command under the hero image.
 
+When replacing the upstream plugin, quit its open Notes panes first (`Esc`,
+then `q`). This fork keeps the same plugin ID and note format, so existing notes
+are preserved. Do not run both versions against the same workspace note.
+
 ## Open
 
-One toggle action, scoped to the current tab — it opens the pane docked on
-the right edge, focuses it if it's already open, and closes it if it's focused:
+One toggle action opens the workspace's notes on the right, focuses the existing
+editor if open, and closes it if already focused:
 
 ```
 herdr plugin action invoke herdr-notes.open-notes-windows   # windows
 herdr plugin action invoke herdr-notes.open-notes           # linux / macos
 ```
+
+Once open, Notes follows tab changes within its workspace, normally within half
+a second, without taking keyboard focus. Returning from another workspace brings
+that workspace's editor to its selected tab. No second editor is created.
+
+Herdr has no native workspace-dock API. This fork moves the existing terminal
+pane between tab layouts; it is not a permanent UI sidebar. Zoomed layouts defer
+the move until unzoomed. A deliberately standalone Notes tab is left in place
+to avoid closing that tab. Closing the tab currently containing Notes closes the
+editor too; use the shortcut to reopen the saved note. With multiple attached
+clients, following uses Herdr's server-wide focus, not an individual client's view.
+
+### Keyboard shortcut
+
+Add this to your Herdr `config.toml` (Windows: `%APPDATA%\\herdr\\config.toml`):
+
+```toml
+[[keys.command]]
+key = "ctrl+alt+n"
+type = "plugin_action"
+command = "herdr-notes.open-notes-windows"
+description = "Workspace notes"
+```
+
+On Linux/macOS, use `herdr-notes.open-notes` as the command. Run
+`herdr config check` and `herdr server reload-config` to apply it. If your
+terminal or keyboard layout reserves `Ctrl+Alt+N`, use an available prefix
+combination such as `prefix+n` instead.
 
 First run greets you with the keymap:
 

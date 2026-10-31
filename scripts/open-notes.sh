@@ -96,6 +96,7 @@ fi
 case "$decision" in
   "FOCUS "*)
     pid="${decision#FOCUS }"
+    "$bin" --follow "$pid" || exit 1
     "$herdr_bin" pane zoom "$pid" --on >/dev/null 2>&1 || true
     exec "$herdr_bin" pane zoom "$pid" --off
     ;;

@@ -119,6 +119,8 @@ $Decision = $Decision.Trim()
 
 if ($Decision -like 'FOCUS *') {
     $PaneId = $Decision.Substring(6)
+    & $Bin --follow $PaneId
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $HerdrBin pane zoom $PaneId --on *> $null
     & $HerdrBin pane zoom $PaneId --off
     exit $LASTEXITCODE
