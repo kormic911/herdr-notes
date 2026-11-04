@@ -2,7 +2,7 @@
 //! logic is unit-tested and ids extracted from herdr's JSON are validated
 //! before they reach an argv. Three stdin→stdout modes:
 //!
-//! - `--launch-decision`: `herdr pane list` JSON → `OPEN` | `FOCUS <id>` |
+//! - `--launch-decision`: `herdr pane list` JSON → `OPEN` |
 //!   `CLOSE <id>` | `REPLACE <id>`, preferring the focused tab's Notes pane
 //!   but matching ANY pane that edits the focused pane's NOTE FILE
 //!   ([`crate::state::note_key`]) — a duplicate on one file would clobber it
@@ -123,7 +123,7 @@ fn token_stale(tokens: &serde_json::Map<String, serde_json::Value>, key: &str, n
     }
 }
 
-/// `OPEN`, `FOCUS <id>`, `CLOSE <id>`, or `REPLACE <id>` (dead pane: close it,
+/// `OPEN`, `CLOSE <id>`, or `REPLACE <id>` (dead pane: close it,
 /// then open fresh) from a `pane list` JSON. Unparseable input, no focused
 /// pane, or an unsafe id all degrade to `OPEN`.
 pub fn launch_decision(pane_list_json: &str, now: u64) -> String {
@@ -159,11 +159,8 @@ pub fn launch_decision(pane_list_json: &str, now: u64) -> String {
     if token_stale(&pane.tokens, METADATA_SOURCE, now) {
         return format!("REPLACE {id}");
     }
-    if Some(id) == focused.pane_id.as_deref() {
-        format!("CLOSE {id}")
-    } else {
-        format!("FOCUS {id}")
-    }
+    // Toggle visibility independently of keyboard focus.
+    format!("CLOSE {id}")
 }
 
 /// `<pane_id>\t<cwd>` of the focused pane, or empty on any failure.
@@ -248,22 +245,22 @@ mod tests {
 
     #[test]
     fn decision_open_focus_close() {
-        // Other-tab Notes pane is still focused, never duplicated: two live
+        // Other-tab Notes pane is closed, never duplicated: two live
         // instances of one workspace's note would clobber each other.
         let other_tab = pane_list(&format!(
             r#"{FOCUSED},{{"pane_id":"w1:p9",{LIVE},"tab_id":"w1:t2"}}"#
         ));
-        assert_eq!(launch_decision(&other_tab, 100), "FOCUS w1:p9");
+        assert_eq!(launch_decision(&other_tab, 100), "CLOSE w1:p9");
         // Same-tab pane wins over an other-tab one.
         let both_tabs = pane_list(&format!(
             r#"{FOCUSED},{{"pane_id":"w1:p9",{LIVE},"tab_id":"w1:t2"}},{{"pane_id":"w1:p2",{LIVE},"tab_id":"w1:t1"}}"#
         ));
-        assert_eq!(launch_decision(&both_tabs, 100), "FOCUS w1:p2");
-        // Same-tab unfocused pane is focused.
+        assert_eq!(launch_decision(&both_tabs, 100), "CLOSE w1:p2");
+        // Same-tab unfocused pane toggles closed.
         let same_tab = pane_list(&format!(
             r#"{FOCUSED},{{"pane_id":"w1:p2",{LIVE},"tab_id":"w1:t1"}}"#
         ));
-        assert_eq!(launch_decision(&same_tab, 100), "FOCUS w1:p2");
+        assert_eq!(launch_decision(&same_tab, 100), "CLOSE w1:p2");
         // Focused Notes pane toggles closed.
         let focused_notes = pane_list(&format!(
             r#"{{"pane_id":"w1:p2",{LIVE},"tab_id":"w1:t1","focused":true}}"#
@@ -274,7 +271,7 @@ mod tests {
         let token_only = pane_list(&format!(
             r#"{FOCUSED},{{"pane_id":"w1:p2","tab_id":"w1:t1","tokens":{{"herdr-notes":"95"}}}}"#
         ));
-        assert_eq!(launch_decision(&token_only, 100), "FOCUS w1:p2");
+        assert_eq!(launch_decision(&token_only, 100), "CLOSE w1:p2");
     }
 
     #[test]
@@ -291,7 +288,7 @@ mod tests {
         let same_ws = pane_list(&format!(
             r#"{focused},{{"pane_id":"w1:p9",{LIVE},"tab_id":"w1:t2","workspace_id":"w1"}}"#
         ));
-        assert_eq!(launch_decision(&same_ws, 100), "FOCUS w1:p9");
+        assert_eq!(launch_decision(&same_ws, 100), "CLOSE w1:p9");
     }
 
     #[test]
@@ -305,11 +302,11 @@ mod tests {
         let legacy_mate = pane_list(&format!(
             r#"{focused},{{"pane_id":"w2:p9",{LIVE},"tab_id":"w2:t1","workspace_id":"w:2"}}"#
         ));
-        assert_eq!(launch_decision(&legacy_mate, 100), "FOCUS w2:p9");
+        assert_eq!(launch_decision(&legacy_mate, 100), "CLOSE w2:p9");
         let missing_id = pane_list(&format!(
             r#"{focused},{{"pane_id":"w2:p9",{LIVE},"tab_id":"w2:t1"}}"#
         ));
-        assert_eq!(launch_decision(&missing_id, 100), "FOCUS w2:p9");
+        assert_eq!(launch_decision(&missing_id, 100), "CLOSE w2:p9");
         // A safe id has its own file — NOT a duplicate of a legacy-keyed pane.
         let safe_focused =
             r#"{"pane_id":"w1:p1","focused":true,"tab_id":"w1:t1","workspace_id":"w1"}"#;
@@ -329,7 +326,7 @@ mod tests {
         let other_case = pane_list(&format!(
             r#"{focused},{{"pane_id":"w1:p9",{LIVE},"tab_id":"w1:t2","workspace_id":"w6"}}"#
         ));
-        assert_eq!(launch_decision(&other_case, 100), "FOCUS w1:p9");
+        assert_eq!(launch_decision(&other_case, 100), "CLOSE w1:p9");
     }
 
     #[test]

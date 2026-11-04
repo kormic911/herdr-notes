@@ -1,13 +1,12 @@
 # open-notes.ps1 -- Windows launcher for the herdr-notes pane.
 #
-# Idempotent "launch-or-focus, toggle on repeat", scoped to the FOCUSED
+# Toggle Notes visibility, scoped to the FOCUSED
 # pane's workspace (each workspace has its own note file; the binary matches
 # panes by note-FILE identity, see state.rs note_key):
 #   - no Notes pane on that note file       -> open one in the current tab,
 #     DOCKED ON THE RIGHT edge (any-tab scope within the workspace: a second
 #     live instance on the same note file would clobber it on save)
-#   - a Notes pane exists but isn't focused -> focus it
-#   - the focused pane IS the Notes pane    -> close it (toggle off)
+#   - a live Notes pane exists             -> save and close it (toggle off)
 #   - Notes pane with a stale heartbeat     -> close the corpse, open fresh
 #
 # Right dock: split the tab's RIGHTMOST pane to the right. `pane split --ratio`
@@ -118,14 +117,7 @@ $Decision = ($PanesJson | & $Bin --launch-decision 2>$null)
 if ($LASTEXITCODE -ne 0 -or -not $Decision) { $Decision = 'OPEN' }
 $Decision = $Decision.Trim()
 
-if ($Decision -like 'FOCUS *') {
-    $PaneId = $Decision.Substring(6)
-    & $Bin --follow $PaneId
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $HerdrBin pane zoom $PaneId --on *> $null
-    & $HerdrBin pane zoom $PaneId --off
-    exit $LASTEXITCODE
-} elseif ($Decision -like 'CLOSE *') {
+if ($Decision -like 'CLOSE *') {
     $PaneId = $Decision.Substring(6)
     # Graceful save+quit before the close: Esc leaves edit mode (which saves),
     # q quits from preview. `pane close` alone kills the TUI, losing any

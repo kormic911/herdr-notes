@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # open-notes.sh — unix launcher for the herdr-notes pane.
 #
-# Idempotent "launch-or-focus, toggle on repeat", scoped to the FOCUSED
+# Toggle Notes visibility, scoped to the FOCUSED
 # pane's workspace (each workspace has its own note file; the binary matches
 # panes by note-FILE identity, see state.rs note_key):
 #   - no Notes pane on that note file       -> open one in the current tab,
 #     DOCKED ON THE RIGHT edge (any-tab scope within the workspace: a second
 #     live instance on the same note file would clobber it on save)
-#   - a Notes pane exists but isn't focused -> focus it
-#   - the focused pane IS the Notes pane    -> close it (toggle off)
+#   - a live Notes pane exists             -> save and close it (toggle off)
 #   - Notes pane with a stale heartbeat     -> close the corpse, open fresh
 #
 # Right dock: split the tab's RIGHTMOST pane to the right. `pane split --ratio`
@@ -95,12 +94,6 @@ if [ -n "$panes" ]; then
 fi
 
 case "$decision" in
-  "FOCUS "*)
-    pid="${decision#FOCUS }"
-    "$bin" --follow "$pid" || exit 1
-    "$herdr_bin" pane zoom "$pid" --on >/dev/null 2>&1 || true
-    exec "$herdr_bin" pane zoom "$pid" --off
-    ;;
   "CLOSE "*)
     pid="${decision#CLOSE }"
     # Graceful save+quit before the close: Esc leaves edit mode (which saves),

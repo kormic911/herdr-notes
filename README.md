@@ -45,7 +45,7 @@ herdr plugin install kormic911/herdr-notes
 - **Actually persistent** — atomic autosaves to a per-workspace JSON file in
   herdr's config directory. Close the pane, kill the terminal, reboot: it
   comes back.
-- **A polite pane** — one toggle action opens, focuses, or closes it; a
+- **A polite pane** — one toggle action opens or closes it; a
   heartbeat token means a dead pane — even one left behind by a herdr
   server restart — gets replaced on the next toggle, never duplicated.
 
@@ -110,8 +110,10 @@ are errors rather than silently reverting to defaults.
 
 ### Manual toggle
 
-One toggle action opens the workspace's notes on the right, focuses the existing
-editor if open, and closes it if already focused:
+`Ctrl+Alt+N` toggles Notes for the current workspace: it saves and closes an open Notes pane even when another pane has focus. Press it again to reopen the same note at its remembered width.
+
+One toggle action opens the workspace's notes on the right, or saves and closes
+the existing editor regardless of which pane has focus:
 
 ```
 herdr plugin action invoke herdr-notes.open-notes-windows   # windows

@@ -12,7 +12,7 @@
 
 id = "herdr-notes"
 name = "herdr-notes"
-version = "0.3.1"
+version = "0.3.2"
 description = "Persistent markdown notes pane: one scrollable note with preview/edit, autosaved across restarts."
 min_herdr_version = "0.9.3"
 platforms = ["linux", "macos", "windows"]
@@ -58,20 +58,20 @@ title = "Notes"
 placement = "split"
 command = ["./target/release/herdr-notes"]
 
-# Toggle the notes pane: open right-docked / focus if unfocused / close if
-# focused / replace if the heartbeat is stale.
+# Toggle the notes pane: open right-docked / save and close if open /
+# replace if the heartbeat is stale.
 [[actions]]
 id = "open-notes"
 platforms = ["linux", "macos"]
 title = "Toggle notes"
-description = "Open the notes pane docked on the right (focus it if open; close it if focused)."
+description = "Toggle the workspace notes pane; save and close it if already open."
 command = ["bash", "scripts/open-notes.sh"]
 
 [[actions]]
 id = "open-notes-windows"
 platforms = ["windows"]
 title = "Toggle notes"
-description = "Open the notes pane docked on the right (focus it if open; close it if focused)."
+description = "Toggle the workspace notes pane; save and close it if already open."
 command = [
   "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
   '''$u=New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding=$u; $OutputEncoding=$u; $b=$env:HERDR_BIN_PATH; if(-not $b){$b='herdr'}; $p=((& $b plugin list --json|ConvertFrom-Json).result.plugins|?{$_.plugin_id -eq 'herdr-notes'}).plugin_root; if($p -and $p.StartsWith('\\?\')){$p=$p.Substring(4)}; & (Join-Path (Join-Path $p 'scripts') 'open-notes.ps1')''',

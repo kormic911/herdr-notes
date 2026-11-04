@@ -97,7 +97,8 @@ while the TUI is running in a pane — quit/close the pane first (and
 - Herdr has no native workspace dock. `src/follow.rs` reconciles the running
   editor with the active tab every 500ms on a process-owned thread. It moves
   the existing PTY with `pane.move` and `focus: false`; no second writer or
-  detached daemon is created. Explicit action invocations reconcile before focus.
+  detached daemon is created. The toggle action closes an existing editor regardless of focus; it does not
+  use the old focus-first path.
 - Re-read focus after layout planning. Skip other workspaces, missing IDs,
   duplicate editor tokens, same-tab moves, and source tabs with only the Notes
   pane (moving it would close that tab). Herdr refuses zoomed-tab moves; retry

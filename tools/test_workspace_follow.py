@@ -103,8 +103,11 @@ with TestDirectory(prefix="herdr-notes-test-") as directory:
             notes = next(p["pane_id"] for p in panes() if "herdr-notes" in p.get("tokens", {}))
             wait_for(lambda: any(p["pane_id"] == notes and "herdr-notes" in p.get("tokens", {})
                                  for p in panes()), "Notes did not start")
-            # The launcher stamps before the process starts. Wait for the TUI.
-            time.sleep(0.5)
+            # The launcher stamps before process startup. A new heartbeat
+            # proves the editor is running, even with slow Windows startup.
+            initial_token = next(p for p in panes() if p["pane_id"] == notes)["tokens"]["herdr-notes"]
+            wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tokens"]["herdr-notes"] != initial_token,
+                     "Editor did not emit a heartbeat")
             auto_open()
             assert len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 1
             assert next(p for p in panes() if p["focused"])["pane_id"] == original
@@ -171,7 +174,29 @@ with TestDirectory(prefix="herdr-notes-test-") as directory:
             restored = next(p["pane_id"] for p in panes() if p["workspace_id"] == workspace and
                             "herdr-notes" in p.get("tokens", {}))
             assert abs(note_width(restored) - resized_width) <= 1
-            print("PASS: remembered width across tabs and restart, configurable auto-open, idempotence, restored shells, tab following, focus, workspace isolation and saved text")
+            # Exercise the actual shortcut action with focus outside Notes.
+            cli("tab", "focus", first)
+            wait_for(lambda: next(p for p in panes() if p["pane_id"] == restored)["tab_id"] == first,
+                     "Restored editor did not follow")
+            cli("pane", "zoom", original, "--on")
+            cli("pane", "zoom", original, "--off")
+            action = "herdr-notes.open-notes-windows" if os.name == "nt" else "herdr-notes.open-notes"
+            cli("plugin", "action", "invoke", action)
+            wait_for(lambda: all(p["pane_id"] != restored for p in panes()),
+                     "Toggle failed to close unfocused Notes")
+            time.sleep(1)
+            assert not any(p["workspace_id"] == workspace and "herdr-notes" in p.get("tokens", {}) for p in panes())
+            cli("plugin", "action", "invoke", action)
+            wait_for(lambda: any(p["workspace_id"] == workspace and "herdr-notes" in p.get("tokens", {}) for p in panes()),
+                     "Toggle failed to reopen Notes")
+            time.sleep(1)
+            reopened = next(p["pane_id"] for p in panes() if p["workspace_id"] == workspace and "herdr-notes" in p.get("tokens", {}))
+            assert abs(note_width(reopened) - resized_width) <= 1
+            cli("plugin", "action", "invoke", action)
+            wait_for(lambda: all(p["pane_id"] != reopened for p in panes()),
+                     "Toggle failed to close focused Notes")
+            assert json.loads((state / f"{workspace}.json").read_text())["text"] == "unsaved text survives tab switches"
+            print("PASS: shortcut close/reopen from either pane, remembered width across tabs and restart, configurable auto-open, idempotence, restored shells, tab following, focus, workspace isolation and saved text")
         finally:
             # This server was created by this test; never stop the default session.
             subprocess.run(prefix + ["server", "stop"], env=env, capture_output=True, timeout=10)
