@@ -1,6 +1,6 @@
 """Integration test against an isolated named Herdr session (never the user's).
 
-Run after cargo build --release: python tools/test_workspace_follow.py
+Run after cargo build --release: python tools/test_tab_notes.py
 """
 import json
 import os
@@ -95,108 +95,90 @@ with TestDirectory(prefix="herdr-notes-test-") as directory:
             workspace = created["workspace"]["workspace_id"]
             first = created["tab"]["tab_id"]
             original = created["root_pane"]["pane_id"]
-            initial_count = len(panes())
+            def key(tab):
+                return "tab" + tab.lower().encode().hex()
+            def notes_in(tab):
+                return [p for p in panes() if p["tab_id"] == tab and "herdr-notes" in p.get("tokens", {})]
+            def wait_notes(tab):
+                wait_for(lambda: len(notes_in(tab)) == 1, "Missing tab Notes: " + tab)
+                pane = notes_in(tab)[0]
+                token = pane["tokens"]["herdr-notes"]
+                wait_for(lambda: notes_in(tab)[0]["tokens"]["herdr-notes"] != token, "Editor heartbeat missing")
+                return pane["pane_id"]
+            def layout(pane):
+                return cli("pane", "layout", "--pane", pane)["layout"]
+            def rects(pane):
+                return {p["pane_id"]: p["rect"] for p in layout(pane)["panes"]}
+            def width(pane):
+                return rects(pane)[pane]["width"]
+            def saved(tab):
+                path = state / (key(tab) + ".json")
+                return json.loads(path.read_text())["text"] if path.exists() else None
+            def toggle():
+                cli("plugin", "action", "invoke", "herdr-notes.open-notes-windows" if os.name == "nt" else "herdr-notes.open-notes")
             auto_open()
-            assert len(panes()) == initial_count, "Disabled auto-open changed the layout"
+            assert not notes_in(first), "Disabled auto-open opened Notes"
+            old = state / f"{workspace}.json"
+            old.write_text(json.dumps({"text":"workspace backup", "mode":"preview"}))
             configure()
             auto_open()
-            notes = next(p["pane_id"] for p in panes() if "herdr-notes" in p.get("tokens", {}))
-            wait_for(lambda: any(p["pane_id"] == notes and "herdr-notes" in p.get("tokens", {})
-                                 for p in panes()), "Notes did not start")
-            # The launcher stamps before process startup. A new heartbeat
-            # proves the editor is running, even with slow Windows startup.
-            initial_token = next(p for p in panes() if p["pane_id"] == notes)["tokens"]["herdr-notes"]
-            wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tokens"]["herdr-notes"] != initial_token,
-                     "Editor did not emit a heartbeat")
-            auto_open()
-            assert len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 1
-            assert next(p for p in panes() if p["focused"])["pane_id"] == original
-            cli("pane", "send-keys", notes, "e")
-            cli("pane", "send-text", notes, "unsaved text survives tab switches")
-            def note_width(pane):
-                layout = cli("pane", "layout", "--pane", pane)["layout"]
-                return next(p["rect"]["width"] for p in layout["panes"] if p["pane_id"] == pane)
-            time.sleep(0.7)  # Establish the observer's initial layout.
-            before_width = note_width(notes)
-            cli("pane", "resize", "--pane", notes, "--direction", "left", "--amount", "0.1")
-            resized_width = note_width(notes)
-            assert resized_width != before_width, (before_width, resized_width)
-            width_file = state / f"layout-{workspace}.json"
-            wait_for(lambda: width_file.exists() and json.loads(width_file.read_text())["width_columns"] == resized_width,
-                     "Resized width was not persisted")
+            notes_a = wait_notes(first)
+            assert saved(first) == "workspace backup"
+            cli("pane", "send-keys", notes_a, "e")
+            cli("pane", "send-text", notes_a, "TAB A: ")
             second = cli("tab", "create", "--workspace", workspace, "--cwd", directory, "--focus")
             target = second["tab"]["tab_id"]
-            wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tab_id"] == target,
-                     "Notes did not follow the new tab")
-            assert abs(note_width(notes) - resized_width) <= 1, (note_width(notes), resized_width)
-            assert not next(p for p in panes() if p["pane_id"] == notes)["focused"], "Notes stole focus"
-            cli("tab", "focus", first)
-            wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tab_id"] == first,
-                     "Notes did not return to the first tab")
-            assert abs(note_width(notes) - resized_width) <= 1
-            other = cli("workspace", "create", "--label", "other-test", "--cwd", directory, "--focus")
-            wait_for(lambda: len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 2,
-                     "workspace.created hook did not auto-open Notes")
+            notes_b = wait_notes(target)
+            assert notes_a != notes_b
+            assert next(p for p in panes() if p["pane_id"] == notes_a)["tab_id"] == first
+            cli("pane", "send-keys", notes_b, "e")
+            cli("pane", "send-text", notes_b, "TAB B only")
+            wait_for(lambda: saved(first) == "TAB A: workspace backup" and saved(target) == "TAB B only", "Tab edits were not isolated")
+            cli("pane", "resize", "--pane", notes_a, "--direction", "left", "--amount", "0.1")
+            a_width = width(notes_a)
+            b_width = width(notes_b)
+            assert a_width != b_width
+            width_file = state / ("layout-" + key(first) + ".json")
+            wait_for(lambda: width_file.exists() and json.loads(width_file.read_text())["width_columns"] == a_width, "Tab width not saved")
+            a_rects, b_rects = rects(notes_a), rects(notes_b)
+            for _ in range(3):
+                cli("tab", "focus", first)
+                time.sleep(0.6)
+                cli("tab", "focus", target)
+                time.sleep(0.6)
+                assert rects(notes_a) == a_rects and rects(notes_b) == b_rects, "Tab switch resized terminals"
             auto_open()
-            assert len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 2
-            time.sleep(1)
-            own = next(p for p in panes() if p["pane_id"] == notes)
-            assert own["workspace_id"] == workspace and own["tab_id"] == first
-            assert next(p for p in panes() if p["focused"])["workspace_id"] == other["workspace"]["workspace_id"]
-            configure(follow_tabs=False)
-            time.sleep(0.6)
+            assert len(notes_in(first)) == len(notes_in(target)) == 1
+            # Toggle the second tab from its CLI: the first note remains open.
+            anchor_b = next(p["pane_id"] for p in panes() if p["tab_id"] == target and p["pane_id"] != notes_b)
+            cli("pane", "zoom", anchor_b, "--on")
+            cli("pane", "zoom", anchor_b, "--off")
+            toggle()
+            wait_for(lambda: not notes_in(target), "Toggle did not close this tab")
+            third = cli("tab", "create", "--workspace", workspace, "--cwd", directory, "--focus")["tab"]["tab_id"]
+            wait_notes(third)
+            assert len(notes_in(first)) == 1 and not notes_in(target), "Creation hook reopened a closed tab"
             cli("tab", "focus", target)
-            time.sleep(1)
-            assert next(p for p in panes() if p["pane_id"] == notes)["tab_id"] == first
-            configure(follow_tabs=True)
-            wait_for(lambda: next(p for p in panes() if p["pane_id"] == notes)["tab_id"] == target,
-                     "Notes did not follow when returning to its workspace")
-            cli("pane", "send-keys", notes, "Escape", "q")
-            wait_for(lambda: all(p["pane_id"] != notes for p in panes()), "Notes did not quit")
-            saved = json.loads((state / f"{workspace}.json").read_text())
-            assert saved["text"] == "unsaved text survives tab switches", saved
-            # A restored Notes shell has its label but no live identity token.
-            corpse = cli("pane", "split", original, "--direction", "right", "--no-focus")["pane"]["pane_id"]
-            cli("pane", "rename", corpse, "Notes")
-            auto_open()
-            assert all(p["pane_id"] != corpse for p in panes())
-            assert len([p for p in panes() if p["workspace_id"] == workspace and
-                        "herdr-notes" in p.get("tokens", {})]) == 1
-            # Real server restart exercises the manifest startup hook and
-            # recovery of restored Notes shells, without touching any user session.
+            toggle()
+            notes_b = wait_notes(target)
+            assert saved(target) == "TAB B only" and width(notes_b) == b_width
+            # Close again and verify the per-tab preference survives restart.
+            toggle()
+            wait_for(lambda: not notes_in(target), "Focused toggle failed")
+            cli("pane", "send-keys", notes_a, "Escape")
+            assert json.loads(old.read_text())["text"] == "workspace backup"
             cli("server", "stop")
             server.wait(timeout=10)
             server = subprocess.Popen(prefix + ["server"], env=env, stdout=log, stderr=log,
                                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             wait_for(ready, "Isolated server did not restart")
-            wait_for(lambda: len([p for p in panes() if "herdr-notes" in p.get("tokens", {})]) == 2,
-                     "Startup hook did not restore both workspace editors")
-            restored = next(p["pane_id"] for p in panes() if p["workspace_id"] == workspace and
-                            "herdr-notes" in p.get("tokens", {}))
-            assert abs(note_width(restored) - resized_width) <= 1
-            # Exercise the actual shortcut action with focus outside Notes.
-            cli("tab", "focus", first)
-            wait_for(lambda: next(p for p in panes() if p["pane_id"] == restored)["tab_id"] == first,
-                     "Restored editor did not follow")
-            cli("pane", "zoom", original, "--on")
-            cli("pane", "zoom", original, "--off")
-            action = "herdr-notes.open-notes-windows" if os.name == "nt" else "herdr-notes.open-notes"
-            cli("plugin", "action", "invoke", action)
-            wait_for(lambda: all(p["pane_id"] != restored for p in panes()),
-                     "Toggle failed to close unfocused Notes")
-            time.sleep(1)
-            assert not any(p["workspace_id"] == workspace and "herdr-notes" in p.get("tokens", {}) for p in panes())
-            cli("plugin", "action", "invoke", action)
-            wait_for(lambda: any(p["workspace_id"] == workspace and "herdr-notes" in p.get("tokens", {}) for p in panes()),
-                     "Toggle failed to reopen Notes")
-            time.sleep(1)
-            reopened = next(p["pane_id"] for p in panes() if p["workspace_id"] == workspace and "herdr-notes" in p.get("tokens", {}))
-            assert abs(note_width(reopened) - resized_width) <= 1
-            cli("plugin", "action", "invoke", action)
-            wait_for(lambda: all(p["pane_id"] != reopened for p in panes()),
-                     "Toggle failed to close focused Notes")
-            assert json.loads((state / f"{workspace}.json").read_text())["text"] == "unsaved text survives tab switches"
-            print("PASS: shortcut close/reopen from either pane, remembered width across tabs and restart, configurable auto-open, idempotence, restored shells, tab following, focus, workspace isolation and saved text")
+            restored = wait_notes(first)
+            wait_notes(third)
+            assert not notes_in(target)
+            assert saved(first) == "TAB A: workspace backup" and saved(target) == "TAB B only"
+            assert abs(width(restored) - a_width) <= 1
+            assert json.loads(old.read_text())["text"] == "workspace backup"
+            print("PASS: per-tab auto-open, independent notes and widths, stable layouts during tab switches, toggle isolation, migration backup and restart")
         finally:
             # This server was created by this test; never stop the default session.
             subprocess.run(prefix + ["server", "stop"], env=env, capture_output=True, timeout=10)

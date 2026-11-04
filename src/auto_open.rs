@@ -1,4 +1,4 @@
-//! One-shot startup/workspace-created reconciliation. Always uses explicit IDs
+//! One-shot startup/tab-created reconciliation. Always uses explicit IDs
 //! and never changes the user's focus. Serialized across concurrent hooks.
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -42,11 +42,11 @@ fn live(pane: &Value, now: u64) -> bool {
         .is_some_and(|stamp| now.saturating_sub(stamp) <= crate::launch::HEARTBEAT_STALE_SECS)
 }
 
-fn workspaces(panes: &[Value]) -> BTreeSet<String> {
+fn tabs(panes: &[Value]) -> BTreeSet<String> {
     panes
         .iter()
-        .filter_map(|p| p["workspace_id"].as_str())
-        .filter(|id| crate::state::note_key(Some(id)).is_some())
+        .filter_map(|p| p["tab_id"].as_str())
+        .filter(|id| crate::state::tab_key(id).is_some())
         .map(str::to_owned)
         .collect()
 }
@@ -88,7 +88,9 @@ pub fn run() -> io::Result<()> {
         .as_array()
         .ok_or_else(|| io::Error::other("Missing pane list"))?;
     let binary = std::env::current_exe()?;
-    for workspace in workspaces(panes) {
+    for tab in tabs(panes) {
+        let key = crate::state::tab_key(&tab).unwrap();
+        if crate::state::closed_path(&key).is_some_and(|p| p.exists()) { continue; }
         // Refresh while holding the lock: startup and creation hooks can race.
         let snapshot = cli(&["pane", "list"])?;
         let all = snapshot["panes"]
@@ -96,7 +98,7 @@ pub fn run() -> io::Result<()> {
             .ok_or_else(|| io::Error::other("Missing pane list"))?;
         let local: Vec<_> = all
             .iter()
-            .filter(|p| p["workspace_id"] == workspace)
+            .filter(|p| p["tab_id"] == tab)
             .collect();
         let notes: Vec<_> = local.iter().copied().filter(|p| is_notes(p)).collect();
         if notes.len() > 1 || notes.iter().any(|p| live(p, crate::state::unix_now())) {
@@ -127,7 +129,7 @@ pub fn run() -> io::Result<()> {
         }
         let plan = crate::launch::open_plan_with_width(
             &json!({"result":layout}).to_string(),
-            crate::width::preferred(&workspace, &config),
+            crate::width::preferred(&crate::state::tab_key(&tab).unwrap(), &config),
         );
         let Some((target, ratio)) = plan.split_once('\t') else {
             continue;
@@ -169,19 +171,19 @@ pub fn run() -> io::Result<()> {
 mod tests {
     use super::*;
     #[test]
-    fn detects_live_and_restored_notes_and_filters_unsafe_workspaces() {
+    fn detects_live_and_restored_notes_and_filters_unsafe_tabs() {
         assert!(is_notes(&json!({"label":"Notes"})));
         assert!(!live(&json!({"label":"Notes"}), 100));
         assert!(live(&json!({"tokens":{"herdr-notes":"95"}}), 100));
         assert!(!live(&json!({"tokens":{"herdr-notes":"1"}}), 100));
         assert_eq!(
-            workspaces(&[
-                json!({"workspace_id":"w1"}),
-                json!({"workspace_id":"w1"}),
-                json!({"workspace_id":"../x"}),
+            tabs(&[
+                json!({"tab_id":"w1:t1"}),
+                json!({"tab_id":"w1:t1"}),
+                json!({"tab_id":"../x"}),
                 json!({})
             ]),
-            BTreeSet::from(["w1".into()])
+            BTreeSet::from(["w1:t1".into()])
         );
     }
     #[test]

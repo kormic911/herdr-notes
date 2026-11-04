@@ -124,6 +124,59 @@ pub fn note_key(workspace_id: Option<&str>) -> Option<String> {
     Some(key)
 }
 
+/// Hex-encode the complete tab id: portable filenames without colon collisions.
+pub fn tab_key(tab: &str) -> Option<String> {
+    if tab.is_empty() || tab.len() > 100 || !tab.bytes().all(|b| b.is_ascii_alphanumeric() || b == b':') { return None; }
+    #[cfg(windows)]
+    let tab = tab.to_ascii_lowercase();
+    Some(format!("tab{}", tab.as_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>()))
+}
+
+pub fn current_key() -> Option<String> {
+    std::env::var("HERDR_TAB_ID").ok().and_then(|id| tab_key(&id))
+        .or_else(|| note_key(workspace_env().as_deref()))
+}
+
+/// Import an old workspace note once, without removing the original backup.
+fn load_tab(dir: &Path, workspace: Option<&str>, key: &str) -> Note {
+    let path = dir.join(format!("{key}.json"));
+    let migrate = || -> std::io::Result<()> {
+        std::fs::create_dir_all(dir)?;
+        let Some(ws) = note_key(workspace) else { return Ok(()); };
+        let lock = std::fs::OpenOptions::new().create(true).truncate(false).read(true).write(true).open(dir.join(format!("migration-{ws}.lock")))?;
+        lock.lock()?;
+        let marker = dir.join(format!("migration-{ws}.done"));
+        if !marker.exists() && !path.exists() {
+            let source = state_dir_path(dir, Some(&ws));
+            if source.exists() {
+                std::fs::copy(source, &path)?;
+            }
+            std::fs::write(marker, key)?;
+        }
+        Ok(())
+    };
+    let _ = migrate();
+    read_note(&path)
+}
+
+pub fn closed_path(key: &str) -> Option<PathBuf> {
+    let dir = std::env::var_os("HERDR_PLUGIN_STATE_DIR")?;
+    Some(PathBuf::from(dir).join(format!("closed-{key}")))
+}
+
+pub fn set_closed(closed: bool) -> std::io::Result<()> {
+    let Some(path) = current_key().and_then(|key| closed_path(&key)) else { return Ok(()); };
+    if closed {
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::write(path, "")
+    } else {
+        match std::fs::remove_file(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(())
+        }
+    }
+}
+
 /// Pure path selection: `<base>/herdr/notes/<note-key>.json` for a
 /// filename-safe id, the legacy `<base>/herdr/notes.json` otherwise.
 /// Built from [`note_key`] so path identity and guard identity always agree.
@@ -145,7 +198,7 @@ fn state_dir_path(dir: &Path, workspace_id: Option<&str>) -> PathBuf {
 
 /// State file location for THIS process (env-derived base + workspace id).
 pub fn state_path() -> Option<PathBuf> {
-    let ws = workspace_env();
+    let ws = current_key();
     Some(match store_base()? {
         StoreBase::PluginState(dir) => state_dir_path(&dir, ws.as_deref()),
         StoreBase::Config(base) => state_path_in(&base, ws.as_deref()),
@@ -154,7 +207,10 @@ pub fn state_path() -> Option<PathBuf> {
 
 pub fn load() -> Note {
     let ws = workspace_env();
+    let tab = std::env::var("HERDR_TAB_ID").ok().and_then(|id| tab_key(&id));
     match store_base() {
+        Some(StoreBase::PluginState(dir)) if tab.is_some() => load_tab(&dir, ws.as_deref(), tab.as_deref().unwrap()),
+        Some(StoreBase::Config(base)) if tab.is_some() => load_tab(&base.join("herdr").join("notes"), ws.as_deref(), tab.as_deref().unwrap()),
         Some(StoreBase::PluginState(dir)) => {
             load_state_dir(&dir, config_base().as_deref(), ws.as_deref())
         }
@@ -258,6 +314,28 @@ pub fn save(note: &Note) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tab_ids_are_distinct_portable_and_validate_input() {
+        assert_ne!(tab_key("w1:t1"), tab_key("w1:t2"));
+        assert_ne!(tab_key("w1:t1"), tab_key("w2:t1"));
+        assert_ne!(tab_key("w1:t1"), tab_key("w1t1"));
+        for id in ["", "../x", "a/b", "a\\b"] { assert!(tab_key(id).is_none()); }
+    }
+
+    #[test]
+    fn workspace_migration_copies_once_and_preserves_original() {
+        let dir = temp_base("tabs-migration");
+        std::fs::write(dir.join("w1.json"), r#"{"text":"old workspace","mode":"preview"}"#).unwrap();
+        let a = tab_key("w1:t1").unwrap();
+        let b = tab_key("w1:t2").unwrap();
+        assert_eq!(load_tab(&dir, Some("w1"), &a).text, "old workspace");
+        assert_eq!(load_tab(&dir, Some("w1"), &b).text, "");
+        std::fs::write(dir.join(format!("{a}.json")), r#"{"text":"new tab text"}"#).unwrap();
+        assert_eq!(load_tab(&dir, Some("w1"), &a).text, "new tab text");
+        assert_eq!(read_note(&dir.join("w1.json")).text, "old workspace");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn roundtrip_preserves_text_and_mode() {

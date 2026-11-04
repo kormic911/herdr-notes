@@ -1,206 +1,108 @@
-<div align="center">
+# herdr-notes
 
-# Herdr Notes
+Persistent Markdown notes for [Herdr](https://herdr.dev), with a separate note
+and Notes pane in each tab. Fork of [alexarthurs/herdr-notes](https://github.com/alexarthurs/herdr-notes).
 
-### The scratch note that lives beside your agents.
-
-One markdown note per workspace in a [Herdr](https://github.com/herdrdev/herdr)
-pane that follows you between tabs. The same editor stays running, preserving
-your cursor, edit mode and unsaved text. Notes autosave and survive restarts.
-
-This is a fork of [alexarthurs/herdr-notes](https://github.com/alexarthurs/herdr-notes)
-with automatic workspace tab following. Requires Herdr 0.9.3 or newer.
-
-<img alt="Rust" src="https://img.shields.io/badge/Rust-self--contained_crate-orange?logo=rust&logoColor=white">
-<img alt="herdr" src="https://img.shields.io/badge/herdr-%E2%89%A5%200.9.3-5865a3">
-<img alt="Platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-2ea44f">
-<img alt="CI" src="https://github.com/kormic911/herdr-notes/actions/workflows/ci.yml/badge.svg">
-<img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
-
-<br><br>
-
-<img src="docs/media/hero.png" alt="The Notes pane docked beside a running test suite: rendered markdown with headings, checkboxes, code and quotes" width="920">
-
-</div>
-
-That's the note docked on the right, keeping its shape while the test suite runs
-next door. Terminals are where the work happens, and the work generates thoughts —
-half-finished todo lists, commands you keep retyping, things to ask about later.
-This gives them a permanent home one keypress away: no editor window, no stray
-`notes.txt`, no saving.
-
-```
-herdr plugin install kormic911/herdr-notes
-```
-
----
-
-## Why you'll keep it open
-
-- **Rendered markdown** — headings, checkboxes, lists, quotes, code blocks
-  and inline styles, drawn natively in the terminal with a scrollbar.
-- **Zero-friction editing** — `e` to type, `Esc` to go back. That's it.
-- **A note per workspace** — every herdr space keeps its own note, keyed to
-  the workspace itself (renames don't lose it).
-- **Actually persistent** — atomic autosaves to a per-workspace JSON file in
-  herdr's config directory. Close the pane, kill the terminal, reboot: it
-  comes back.
-- **A polite pane** — one toggle action opens or closes it; a
-  heartbeat token means a dead pane — even one left behind by a herdr
-  server restart — gets replaced on the next toggle, never duplicated.
+Notes stays in its tab. Switching tabs does not move panes or resize your CLI.
+Each tab saves its own note, pane width, and shortcut visibility preference.
 
 ## Install
 
-From a checkout of this repo:
-
-```
-cargo build --release
-herdr plugin link .
+```sh
+herdr plugin install kormic911/herdr-notes --yes
 ```
 
-Or straight from GitHub with the command under the hero image.
+Requires Herdr 0.9.3 or newer and Rust/Cargo to build the plugin.
 
-When replacing the upstream plugin, quit its open Notes panes first (`Esc`,
-then `q`). This fork keeps the same plugin ID and note format, so existing notes
-are preserved. Do not run both versions against the same workspace note.
-
-## Open
-
-### Automatic opening and settings
-
-Run `herdr plugin config-dir herdr-notes` to find the settings directory. Create
-`config.json` there, using [config.example.json](config.example.json) as a starting
-point. For one shared workspace note that opens automatically and follows tabs:
-
-```json
-{
-  "auto_open": true,
-  "follow_tabs": true,
-  "remember_width": true,
-  "width_columns": 42
-}
-```
-
-| Setting | Default | Behavior |
-| --- | --- | --- |
-| `auto_open` | `false` | Open one Notes editor per workspace at server startup and when a workspace is created |
-| `follow_tabs` | `true` | Move that editor to the selected tab within its workspace |
-| `remember_width` | `true` | Remember resized Notes width per workspace, including after restart |
-| `width_columns` | `42` | Preferred width, from 20 to 160 columns; constrained by available layout space |
-
-Notes remembers pane resizes within about half a second. The saved width is reused when switching tabs or reopening Notes; `width_columns` is the starting width until you resize. Smaller layouts constrain the displayed width without replacing the saved preference. Set `remember_width` to `false` to always use the configured width.
-
-Settings survive plugin reinstalls. Tab following reads changes automatically;
-configured width changes apply on the next open or move when no remembered width overrides them. Turning `auto_open` off leaves
-existing editors open. Closing Notes manually keeps it closed until the next
-startup, workspace creation, or explicit application of settings.
-
-To open Notes for existing workspaces immediately, without restarting Herdr:
+## Open and close
 
 ```sh
-herdr plugin action invoke herdr-notes.apply-settings-windows  # Windows
-herdr plugin action invoke herdr-notes.apply-settings          # Linux/macOS
+herdr plugin action invoke herdr-notes.open-notes-windows  # Windows
+herdr plugin action invoke herdr-notes.open-notes          # Linux/macOS
 ```
 
-Herdr runs startup hooks when its **server starts**, not every time a terminal
-reattaches to an already-running server. The workspace-created hook handles new
-workspaces while it is running. Automatic opening preserves keyboard focus,
-avoids duplicate editors, and skips zoomed layouts. Unknown or invalid settings
-are errors rather than silently reverting to defaults.
+The action opens Notes in the current tab, or saves and closes that tab's Notes
+if it is already open. Other tabs are unaffected.
 
-### Manual toggle
-
-`Ctrl+Alt+N` toggles Notes for the current workspace: it saves and closes an open Notes pane even when another pane has focus. Press it again to reopen the same note at its remembered width.
-
-One toggle action opens the workspace's notes on the right, or saves and closes
-the existing editor regardless of which pane has focus:
-
-```
-herdr plugin action invoke herdr-notes.open-notes-windows   # windows
-herdr plugin action invoke herdr-notes.open-notes           # linux / macos
-```
-
-Once open, Notes follows tab changes within its workspace, normally within half
-a second, without taking keyboard focus. Returning from another workspace brings
-that workspace's editor to its selected tab. No second editor is created.
-
-Herdr has no native workspace-dock API. This fork moves the existing terminal
-pane between tab layouts; it is not a permanent UI sidebar. Zoomed layouts defer
-the move until unzoomed. A deliberately standalone Notes tab is left in place
-to avoid closing that tab. Closing the tab currently containing Notes closes the
-editor too; use the shortcut to reopen the saved note. With multiple attached
-clients, following uses Herdr's server-wide focus, not an individual client's view.
-
-### Keyboard shortcut
-
-Add this to your Herdr `config.toml` (Windows: `%APPDATA%\\herdr\\config.toml`):
+Add this to your Herdr config for Ctrl+Alt+N (use `herdr-notes.open-notes` on Unix):
 
 ```toml
 [[keys.command]]
 key = "ctrl+alt+n"
 type = "plugin_action"
 command = "herdr-notes.open-notes-windows"
-description = "Workspace notes"
+description = "Tab notes"
 ```
 
-On Linux/macOS, use `herdr-notes.open-notes` as the command. Run
-`herdr config check` and `herdr server reload-config` to apply it. If your
-terminal or keyboard layout reserves `Ctrl+Alt+N`, use an available prefix
-combination such as `prefix+n` instead.
+Reload the Herdr config after changing keybindings.
 
-First run greets you with the keymap:
+## Settings
 
-<div align="center">
-<img src="docs/media/welcome.png" alt="Empty note showing the built-in key reference" width="920">
-</div>
+Create `config.json` in the plugin config directory printed by installation.
+On Windows this is `%APPDATA%/herdr/plugins/config/herdr-notes/config.json`.
 
-## Keys
+```json
+{
+  "auto_open": true,
+  "remember_width": true,
+  "width_columns": 42
+}
+```
 
-Preview (default):
+- `auto_open` defaults to `false`. When enabled, Notes opens for existing tabs
+  at server startup and for new tabs. It does not steal keyboard focus.
+- `remember_width` defaults to `true`. Resizing Notes saves that tab's preferred
+  width within about half a second. Zooming or resizing the outer terminal does
+  not replace it.
+- `width_columns` defaults to `42` and accepts 20–160. It supplies the initial
+  width when the tab has no remembered width. Available space may constrain it.
 
-| Key | Action |
-| --- | --- |
-| `e` / `Enter` | edit the note |
-| `Up` `Down` `PgUp` `PgDn` | scroll |
-| `g` / `G` | jump to top / bottom |
-| `x` | clear the note (y/N confirm) |
-| `q` | quit |
+A tab closed using the toggle stays closed, including after restart, until you
+open it with the toggle again. The old `follow_tabs` setting is accepted for
+compatibility but ignored: Notes never follows tabs.
 
-Edit:
+To apply auto-open to an already-running server:
 
-| Key | Action |
-| --- | --- |
-| `Esc` | back to preview (saves) |
-| `Ctrl+S` | save now (autosave runs anyway, ~2s after the last keystroke) |
+```sh
+herdr plugin action invoke herdr-notes.apply-settings-windows  # Windows
+herdr plugin action invoke herdr-notes.apply-settings          # Linux/macOS
+```
 
-`Esc` never exits the app.
+Opening or closing a split resizes that tab once. Switching between tabs does
+not change their layouts. Notes is still a normal split, not a native workspace
+sidebar. Manually moving a Notes pane is unsupported; close it and open Notes
+in the destination tab instead.
 
-<div align="center">
-<img src="docs/media/edit.png" alt="Edit mode: the same note as plain markdown with a block cursor" width="920">
-</div>
+## Editing
 
-## Persistence
+Press `e` or Enter to edit; Escape saves and returns to preview. Edits autosave
+after two seconds of inactivity. Use arrow keys, Page Up/Down, or `g`/`G` to
+scroll in preview. `x` asks before clearing a note; `q` saves and quits.
 
-Each herdr workspace gets its own note, stored as
-`<workspace-id>.json` in herdr's per-plugin state directory
-(`HERDR_PLUGIN_STATE_DIR` — e.g. `%LOCALAPPDATA%\herdr\plugins\herdr-notes\`
-on Windows), keyed by the stable `HERDR_WORKSPACE_ID` herdr injects into
-every pane — ids survive workspace renames, so the note follows the
-workspace, not its label. Closing a workspace just orphans its file; delete
-`<workspace-id>.json` by hand if you want it gone. Run outside herdr, the
-pane falls back to `herdr/notes/` under the platform config dir (single
-shared `notes.json` when there's no workspace id), and any note found in
-the fallback layout is moved into the state dir on first load — an
-existing note is inherited, never lost.
+## Storage and migration
 
-The format is `{ "text": "...", "mode": "preview"|"edit" }`. Saves are
-atomic (temp file + fsync + rename) and happen on leaving edit mode, clear,
-quit, and debounced while typing. A missing or corrupt file falls back to
-an empty note — it never wedges the pane.
+Notes uses Herdr's plugin state directory (`%LOCALAPPDATA%/herdr/plugins/herdr-notes`
+on Windows). Files use stable tab IDs encoded as hexadecimal, so tab renames
+keep the same note. Note files and width preferences survive plugin updates.
+Deleting a tab leaves its saved files available for recovery; a new tab has a
+new identity and a new note.
 
-## Hacking
+Version 0.4 imports an old workspace note into the first tab opened for that
+workspace. The original `<workspace-id>.json` is retained unchanged as a backup;
+other tabs start empty. Migration is serialized and happens only once per
+workspace. During an installed upgrade, existing open Notes panes can be used
+to select which tab receives the old note. Back up the state directory before
+manual migrations or changing plugin versions.
 
-`CLAUDE.md` has the build/dev workflow and the hard-won herdr/Windows
-gotchas (pane spawning, heartbeats, PowerShell 5.1 quirks). The short
-version: `cargo build --release`, `cargo test`,
-`cargo clippy --all-targets -- -D warnings`, all green before shipping.
+## Development
+
+```sh
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+python tools/test_workspace_follow.py
+```
+
+The integration test uses an isolated Herdr session and temporary config/state
+roots. It checks independent tab notes and widths, stable pane rectangles when
+switching tabs, shortcut isolation, migration, and server restart recovery.

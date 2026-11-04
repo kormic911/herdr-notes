@@ -80,6 +80,19 @@ impl Observer {
     }
 }
 
+/// Observe only. Never move panes or resize the user's terminals.
+pub fn start() {
+    if std::env::var("HERDR_ENV").as_deref() != Ok("1") { return; }
+    let (Ok(pane), Some(key)) = (std::env::var("HERDR_PANE_ID"), crate::state::current_key()) else { return; };
+    let _ = std::thread::Builder::new().name("notes-width".into()).spawn(move || {
+        let mut observer = Observer::default();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let _ = observer.capture(&pane, &key);
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

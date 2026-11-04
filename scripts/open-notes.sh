@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 # open-notes.sh — unix launcher for the herdr-notes pane.
 #
-# Toggle Notes visibility, scoped to the FOCUSED
-# pane's workspace (each workspace has its own note file; the binary matches
-# panes by note-FILE identity, see state.rs note_key):
-#   - no Notes pane on that note file       -> open one in the current tab,
-#     DOCKED ON THE RIGHT edge (any-tab scope within the workspace: a second
-#     live instance on the same note file would clobber it on save)
-#   - a live Notes pane exists             -> save and close it (toggle off)
-#   - Notes pane with a stale heartbeat     -> close the corpse, open fresh
+# Toggle Notes in the focused tab: open if absent, save and close if live,
+# recover if stale. Each tab has its own note file and width preference.
 #
 # Right dock: split the tab's RIGHTMOST pane to the right. `pane split --ratio`
 # is the ORIGINAL pane's share, so ~0.7 leaves the new Notes pane ~0.3 on the
@@ -34,19 +28,12 @@ if [ ! -x "$bin" ]; then
     --focus
 fi
 
-# ALWAYS the GLOBAL pane list — never scoped with `--workspace
-# $HERDR_WORKSPACE_ID`. Focus is global (exactly one focused pane across ALL
-# workspaces) and this shell's spawn-time env id can diverge from the focused
-# pane's actual workspace (pane moved between workspaces, action invoked under
-# another workspace's env): a scoped list would then omit the focused pane
-# entirely, the decision would degrade to OPEN, and a duplicate Notes pane
-# would spawn beside the focused workspace's live one — two instances
-# clobbering one note file. The binary does the scoping instead:
-# --launch-decision keys off the FOCUSED pane's own workspace_id field,
-# matching panes by note-FILE identity (state.rs note_key).
+# Read the global list to find the currently focused tab. The Rust helper
+# scopes the toggle by that tab ID rather than an inherited workspace ID.
 panes="$("$herdr_bin" pane list 2>/dev/null || true)"
 
 open_pane() {
+  "$bin" --visibility open
   local fp fid fcwd plan target ratio out np
   fp="$(printf '%s' "$panes" | "$bin" --focused-pane 2>/dev/null || true)"
   fid="${fp%%	*}"
@@ -96,6 +83,7 @@ fi
 case "$decision" in
   "CLOSE "*)
     pid="${decision#CLOSE }"
+    "$bin" --visibility closed
     # Graceful save+quit before the close: Esc leaves edit mode (which saves),
     # q quits from preview. `pane close` alone kills the TUI, losing any
     # keystrokes still inside the 2s autosave debounce window.

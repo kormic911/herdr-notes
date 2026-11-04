@@ -1,3 +1,14 @@
+## Current architecture (v0.4; supersedes workspace-following notes below)
+
+- One note and fixed pane per tab; no pane.move calls. Tab IDs are hex encoded
+  by state::tab_key for collision-free Windows filenames.
+- Auto-open scans tabs at startup and tab/workspace creation under a file lock.
+  A closed-<key> marker keeps toggled-off tabs closed across hooks and restarts.
+- Width observation is read-only except for its own preference file.
+- Workspace migration copies the old note once under a lock, retaining the source.
+  Never let an old workspace editor and a new tab editor run during upgrade.
+- The integration test asserts pane rectangles stay unchanged across tab switches.
+
 # herdr-notes
 
 A single herdr plugin: a persistent markdown notes pane (one scrollable note

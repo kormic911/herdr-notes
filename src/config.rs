@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub auto_open: bool,
+    /// Deprecated, ignored: Notes never moves between tabs.
     pub follow_tabs: bool,
     pub remember_width: bool,
     pub width_columns: u16,
@@ -15,7 +16,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             auto_open: false,
-            follow_tabs: true,
+            follow_tabs: false,
             remember_width: true,
             width_columns: 42,
         }
@@ -60,7 +61,7 @@ mod tests {
     fn defaults_and_partial_settings() {
         assert_eq!(parse("{}").unwrap(), Config::default());
         let config = parse("\u{feff}{\"auto_open\":true,\"width_columns\":60}").unwrap();
-        assert!(config.auto_open && config.follow_tabs);
+        assert!(config.auto_open && !config.follow_tabs);
         assert_eq!(config.width_columns, 60);
     }
     #[test]

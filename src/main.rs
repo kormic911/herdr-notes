@@ -8,7 +8,6 @@
 mod app;
 mod auto_open;
 mod config;
-mod follow;
 mod ipc;
 mod launch;
 mod markdown;
@@ -28,15 +27,7 @@ fn main() -> std::io::Result<()> {
             println!("{}", serde_json::to_string_pretty(&config)?);
             return Ok(());
         }
-        Some("--follow") => {
-            let Some(pane_id) = std::env::args().nth(2) else {
-                return Err(std::io::Error::other("--follow requires a pane id"));
-            };
-            if let Ok(workspace) = std::env::var("HERDR_WORKSPACE_ID") {
-                follow::reconcile(&pane_id, &workspace)?;
-            }
-            return Ok(());
-        }
+        Some("--visibility") => return state::set_closed(std::env::args().nth(2).as_deref() == Some("closed")),
         Some("--launch-decision") => {
             println!(
                 "{}",
@@ -55,7 +46,7 @@ fn main() -> std::io::Result<()> {
                 launch::open_plan_with_width(
                     &read_stdin()?,
                     width::preferred(
-                        &std::env::var("HERDR_WORKSPACE_ID").unwrap_or_default(),
+                        &state::current_key().unwrap_or_default(),
                         &config
                     )
                 )
@@ -79,7 +70,7 @@ fn main() -> std::io::Result<()> {
         Some(other) => {
             eprintln!("herdr-notes: unknown argument `{other}`");
             eprintln!(
-                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>|--follow <pane-id>|--auto-open|--check-config]"
+                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>|--visibility open|closed|--auto-open|--check-config]"
             );
             std::process::exit(2);
         }
@@ -89,7 +80,7 @@ fn main() -> std::io::Result<()> {
     config::load()?;
     let mut terminal = ratatui::init();
     let mut app = app::App::new();
-    follow::start();
+    width::start();
     let result = run(&mut terminal, &mut app);
     app.finalize();
     ratatui::restore();
