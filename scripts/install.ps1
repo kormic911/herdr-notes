@@ -28,7 +28,12 @@ try {
     Invoke-WebRequest -UseBasicParsing -Uri "$Base/$Asset.sha256" -OutFile (Join-Path $Temp 'checksum')
     $Checksum = (Get-Content -LiteralPath (Join-Path $Temp 'checksum') -Raw).Trim()
     if ($Checksum -notmatch '^([a-fA-F0-9]{64})$') { throw 'Invalid release checksum.' }
-    $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $Temp $Asset)).Hash
+    # Use .NET directly: PowerShell 7 hosts can pass a PSModulePath that
+    # prevents Windows PowerShell 5.1 from loading Get-FileHash.
+    $Hasher = [Security.Cryptography.SHA256]::Create()
+    $Stream = [IO.File]::OpenRead((Join-Path $Temp $Asset))
+    try { $Actual = ([BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace('-', '') }
+    finally { $Stream.Dispose(); $Hasher.Dispose() }
     if ($Actual -ine $Checksum) { throw 'Release checksum mismatch. Binary was not installed.' }
     Move-Item -LiteralPath (Join-Path $Temp $Asset) -Destination (Join-Path $Destination 'herdr-notes.exe') -Force
     Write-Output "Installed herdr-notes v$Version (Windows x64); Rust is not required."
