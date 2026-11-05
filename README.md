@@ -12,7 +12,32 @@ Each tab saves its own note, pane width, and shortcut visibility preference.
 herdr plugin install kormic911/herdr-notes --yes
 ```
 
-Requires Herdr 0.9.3 or newer and Rust/Cargo to build the plugin.
+Requires Herdr 0.9.3 or newer and Git. **Rust is not required for installation.**
+The installer downloads the binary matching the plugin version from this fork's
+GitHub Releases and verifies its SHA-256 checksum before installing it.
+
+Supported binaries: Windows x64 (also usable on Windows ARM64 via x64 emulation),
+Linux x64/ARM64 (static musl builds), and macOS Intel/Apple Silicon. Windows uses
+PowerShell 5.1 or later. Linux/macOS use Bash, curl, and sha256sum or shasum.
+Downloads require access to GitHub Release assets. A missing release, unsupported
+platform, or checksum failure stops installation; it never silently compiles.
+
+For development or unsupported platforms, explicitly opt into a source build:
+
+```powershell
+$env:HERDR_NOTES_BUILD_FROM_SOURCE = '1'
+herdr plugin install kormic911/herdr-notes --yes
+Remove-Item Env:HERDR_NOTES_BUILD_FROM_SOURCE
+```
+
+```sh
+HERDR_NOTES_BUILD_FROM_SOURCE=1 herdr plugin install kormic911/herdr-notes --yes
+```
+
+Source builds require Rust/Cargo and the platform's native build tools. For a
+local checkout, `cargo build --release --locked` followed by `herdr plugin link .`
+continues to work. Installing an older plugin revision follows that revision's
+installation instructions; versions before 0.4.1 still compile during install.
 
 ## Open and close
 
@@ -106,3 +131,12 @@ python tools/test_workspace_follow.py
 The integration test uses an isolated Herdr session and temporary config/state
 roots. It checks independent tab notes and widths, stable pane rectangles when
 switching tabs, shortcut isolation, migration, and server restart recovery.
+
+## Publishing binaries
+
+The `Release binaries` workflow builds and tests all five targets on a `v*` tag,
+checks that the tag matches both manifests, and publishes binaries with SHA-256
+checksum files only after every build succeeds. Set the same version in
+`Cargo.toml`, `Cargo.lock`, and `herdr-plugin.toml` before tagging. A manual workflow
+run builds artifacts without publishing a release. Release assets must remain
+available for users installing that version.

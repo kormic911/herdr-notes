@@ -1,3 +1,12 @@
+## Binary distribution (v0.4.1)
+
+- Manifest build hooks download version-pinned GitHub Release binaries and check
+  SHA-256 before replacing target/release/herdr-notes[.exe]. No automatic Cargo fallback.
+- HERDR_NOTES_BUILD_FROM_SOURCE=1 explicitly selects cargo build --release --locked.
+- Tag release builds must all succeed before publishing assets. Keep Cargo and
+  plugin versions synchronized. Never update the manifest from an install hook.
+- Windows installer must remain compatible with PowerShell 5.1.
+
 ## Current architecture (v0.4; supersedes workspace-following notes below)
 
 - One note and fixed pane per tab; no pane.move calls. Tab IDs are hex encoded

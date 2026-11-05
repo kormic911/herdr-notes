@@ -22,3 +22,8 @@ jobs:
       - run: cargo build --release
       - run: cargo test
       - run: cargo clippy --release --all-targets -- -D warnings
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tools/test_install.ps1
+      - if: runner.os != 'Windows'
+        run: python3 tools/test_install_unix.py

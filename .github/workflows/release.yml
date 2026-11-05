@@ -1,0 +1,89 @@
+name: Release binaries
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            extension: .exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tools/test_install.ps1
+      - if: runner.os != 'Windows'
+        run: python3 tools/test_install_unix.py
+      - name: Smoke test compiled binary
+        shell: bash
+        run: ./target/${{ matrix.target }}/release/herdr-notes${{ matrix.extension }} --check-config
+      - name: Package binary and checksum
+        shell: python
+        env:
+          TARGET: ${{ matrix.target }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          import hashlib, os, pathlib, shutil, tomllib
+          root = pathlib.Path('.')
+          version = tomllib.loads((root / 'Cargo.toml').read_text())['package']['version']
+          manifest = tomllib.loads((root / 'herdr-plugin.toml').read_text())
+          assert manifest['version'] == version
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              assert os.environ['GITHUB_REF_NAME'] == 'v' + version
+          target, ext = os.environ['TARGET'], os.environ.get('EXTENSION', '')
+          out = root / 'dist'
+          out.mkdir()
+          asset = out / f'herdr-notes-v{version}-{target}{ext}'
+          shutil.copyfile(root / 'target' / target / 'release' / ('herdr-notes' + ext), asset)
+          asset.chmod(0o755)
+          pathlib.Path(str(asset) + '.sha256').write_text(hashlib.sha256(asset.read_bytes()).hexdigest() + '\n')
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish verified binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes "Prebuilt Notes binaries for Windows, Linux, and macOS. Plugin installation downloads the matching binary and verifies its SHA-256 checksum; Rust is needed only for source builds."
