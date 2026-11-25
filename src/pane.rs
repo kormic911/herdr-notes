@@ -332,10 +332,10 @@ fn windows_shell_path(path: &str) -> std::borrow::Cow<'_, str> {
     if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
         return format!(r"\\{unc}").into();
     }
-    if let Some(drive) = path.strip_prefix(r"\\?\") {
-        if drive.as_bytes().get(1..3) == Some(b":\\") {
-            return drive.into();
-        }
+    if let Some(drive) = path.strip_prefix(r"\\?\")
+        && drive.as_bytes().get(1..3) == Some(b":\\")
+    {
+        return drive.into();
     }
     path.into()
 }
