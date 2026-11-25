@@ -1,10 +1,6 @@
-//! Notes TUI: preview/edit modes over one scrollable markdown note, autosaved
-//! to this workspace's note file (see state.rs), heartbeating a pane identity
-//! token so the launcher can toggle / focus / replace the pane.
-//!
-//! There is no manual save workflow — everything autosaves — and the only
-//! destructive action (`x`, clear the note) sits behind a y/N confirm.
+//! Markdown preview and plain-text editing with debounced autosave.
 
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -22,9 +18,6 @@ use crate::state::{self, Mode, Note};
 
 /// Debounce for the edit-mode autosave.
 const AUTOSAVE_AFTER: Duration = Duration::from_secs(2);
-/// Identity re-stamp interval (launcher stale threshold is 20s).
-const HEARTBEAT_EVERY: Duration = Duration::from_secs(5);
-
 /// Shown in preview when the note is empty; doubles as the quick-start help.
 const EMPTY_HELP: &str = "(empty note)\n\n  e or Enter        start writing\n  Esc               back to preview (saves)\n  Up/Dn PgUp/PgDn   scroll, g/G top/bottom\n  x                 clear the note (asks first)\n  q                 quit\n\nEverything autosaves and survives restarts.";
 
@@ -41,21 +34,11 @@ pub struct App {
     last_edit: Instant,
     /// Body height from the last draw, for PgUp/PgDn and scroll clamping.
     body_height: usize,
-    pane_id: Option<String>,
-    last_beat: Instant,
-    /// Disabled in unit tests so exercising keys never touches disk.
-    persist: bool,
+    save_path: Option<PathBuf>,
 }
 
 impl App {
-    pub fn new() -> Self {
-        let mut app = Self::with_note(state::load(), true);
-        app.pane_id = std::env::var("HERDR_PANE_ID").ok().filter(|id| !id.is_empty());
-        app.report_tokens();
-        app
-    }
-
-    fn with_note(note: Note, persist: bool) -> Self {
+    pub fn with_note(note: Note, save_path: Option<PathBuf>) -> Self {
         let mut app = Self {
             note,
             lines: Vec::new(),
@@ -67,9 +50,7 @@ impl App {
             dirty: false,
             last_edit: Instant::now(),
             body_height: 20,
-            pane_id: None,
-            last_beat: Instant::now(),
-            persist,
+            save_path,
         };
         if app.note.mode == Mode::Edit {
             app.enter_edit();
@@ -77,11 +58,11 @@ impl App {
         app
     }
 
-    // ----- persistence & heartbeat -------------------------------------
+    // ----- persistence -------------------------------------
 
     fn save(&self) {
-        if self.persist {
-            state::save(&self.note);
+        if let Some(path) = &self.save_path {
+            state::save(path, &self.note);
         }
     }
 
@@ -105,22 +86,6 @@ impl App {
     pub fn finalize(&mut self) {
         self.commit();
         self.save();
-    }
-
-    /// Re-stamp the identity token so the launcher knows this pane is alive.
-    /// Cheap (one socket round-trip); the event loop calls this every few
-    /// seconds. Silently a no-op outside herdr.
-    pub fn heartbeat(&mut self) {
-        if self.last_beat.elapsed() < HEARTBEAT_EVERY {
-            return;
-        }
-        self.last_beat = Instant::now();
-        self.report_tokens();
-    }
-
-    fn report_tokens(&self) {
-        let Some(pane_id) = &self.pane_id else { return };
-        let _ = crate::ipc::stamp_identity(pane_id);
     }
 
     // ----- keys --------------------------------------------------------
@@ -456,7 +421,7 @@ mod tests {
     fn app(text: &str) -> App {
         App::with_note(
             Note { text: text.to_string(), mode: Mode::Preview },
-            false, // never touch the real state file from tests
+            None, // never touch the real state file from tests
         )
     }
 
@@ -556,7 +521,7 @@ mod tests {
 
     #[test]
     fn startup_in_edit_mode_loads_the_buffer() {
-        let mut a = App::with_note(Note { text: "a\nb".into(), mode: Mode::Edit }, false);
+        let mut a = App::with_note(Note { text: "a\nb".into(), mode: Mode::Edit }, None);
         assert_eq!(a.lines, vec!["a".to_string(), "b".to_string()]);
         a.on_key(key(KeyCode::Esc));
         assert_eq!(a.note.text, "a\nb", "leaving edit commits losslessly");

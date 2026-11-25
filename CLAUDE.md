@@ -7,16 +7,17 @@
   plugin versions synchronized. Never update the manifest from an install hook.
 - Windows installer must remain compatible with PowerShell 5.1.
 
-## Current architecture (v0.4; supersedes workspace-following notes below)
+## Current architecture (v1.0.0)
 
-- One note and fixed pane per tab; no pane.move calls. Tab IDs are hex encoded
-  by state::tab_key for collision-free Windows filenames.
-- Auto-open scans tabs at startup and tab/workspace creation under a file lock.
-  A closed-<key> marker keeps toggled-off tabs closed across hooks and restarts.
-- Width observation is read-only except for its own preference file.
-- Workspace migration copies the old note once under a lock, retaining the source.
-  Never let an old workspace editor and a new tab editor run during upgrade.
-- The integration test asserts pane rectangles stay unchanged across tab switches.
+- Notes opens in the selected shell pane. Herdr controls the layout.
+- The startup hook restores Notes in the same saved split. The editor holds a
+  per-tab lease, and `q` returns to the shell and clears the saved placement.
+- Note text still uses the existing per-tab files. Workspace migration copies
+  the old note once under a lock and keeps the original.
+- The keybinding action and both scripts call the same Rust installer.
+- `tools/test_tab_notes.py` exercises the workflow in an isolated Herdr session.
+
+The implementation notes below describe the older workspace-scoped launcher.
 
 # herdr-notes
 

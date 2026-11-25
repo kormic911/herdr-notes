@@ -1,115 +1,58 @@
-//! herdr-notes — a persistent markdown notes pane for herdr: one scrollable
-//! note with preview/edit modes, autosaved to a JSON file that survives
-//! restarts.
-//!
-//! The `--*` stdin→stdout helper modes serve the launcher scripts — see
-//! launch.rs.
-
 mod app;
-mod auto_open;
+mod bindings;
 mod config;
-mod ipc;
-mod launch;
 mod markdown;
+mod pane;
 mod state;
-mod width;
 
-use std::io::Read;
 use std::time::Duration;
 
+use anyhow::{Result, bail};
 use crossterm::event::{self, Event};
 
-fn main() -> std::io::Result<()> {
-    match std::env::args().nth(1).as_deref() {
-        Some("--auto-open") => return auto_open::run(),
-        Some("--check-config") => {
-            let config = config::load()?;
-            println!("{}", serde_json::to_string_pretty(&config)?);
-            return Ok(());
+fn main() -> Result<()> {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        ["--open"] => pane::open(),
+        ["--restore"] => pane::restore(),
+        ["--install-keybindings"] => bindings::install(),
+        ["--edit", root, pane_id, terminal_id, herdr] => {
+            pane::edit(root, pane_id, terminal_id, herdr)
         }
-        Some("--visibility") => return state::set_closed(std::env::args().nth(2).as_deref() == Some("closed")),
-        Some("--launch-decision") => {
-            println!(
-                "{}",
-                launch::launch_decision(&read_stdin()?, state::unix_now())
-            );
-            return Ok(());
+        ["--check-config"] => {
+            println!("{}", serde_json::to_string_pretty(&config::load()?)?);
+            Ok(())
         }
-        Some("--focused-pane") => {
-            println!("{}", launch::focused_pane(&read_stdin()?));
-            return Ok(());
-        }
-        Some("--open-plan") => {
-            let config = config::load()?;
-            println!(
-                "{}",
-                launch::open_plan_with_width(
-                    &read_stdin()?,
-                    width::preferred(
-                        &state::current_key().unwrap_or_default(),
-                        &config
-                    )
-                )
-            );
-            return Ok(());
-        }
-        Some("--stamp") => {
-            // Stamp the identity token onto a just-split pane BEFORE its TUI
-            // spawns, so the pane is never observable label-without-token (the
-            // state --launch-decision replaces as a restart corpse). Best
-            // effort: on failure the TUI's own startup stamp covers within ~1s.
-            let Some(pane_id) = std::env::args().nth(2) else {
-                eprintln!("herdr-notes: --stamp requires a pane id");
-                std::process::exit(2);
-            };
-            if let Err(err) = ipc::stamp_identity(&pane_id) {
-                eprintln!("herdr-notes: --stamp {pane_id}: {err}");
-            }
-            return Ok(());
-        }
-        Some(other) => {
-            eprintln!("herdr-notes: unknown argument `{other}`");
-            eprintln!(
-                "usage: herdr-notes [--launch-decision|--focused-pane|--open-plan|--stamp <pane-id>|--visibility open|closed|--auto-open|--check-config]"
-            );
-            std::process::exit(2);
-        }
-        None => {}
+        [] => Ok(edit_note(app::App::with_note(
+            state::load(),
+            state::state_path(),
+        ))?),
+        _ => bail!("Unknown arguments: {args:?}"),
     }
+}
 
-    config::load()?;
+fn edit_note(mut app: app::App) -> std::io::Result<()> {
     let mut terminal = ratatui::init();
-    let mut app = app::App::new();
-    width::start();
     let result = run(&mut terminal, &mut app);
     app.finalize();
     ratatui::restore();
     result
 }
 
-/// Event loop with a short poll so the liveness heartbeat keeps stamping and
-/// the debounced autosave keeps flushing while idle.
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut app::App) -> std::io::Result<()> {
     loop {
         terminal.draw(|frame| app.draw(frame))?;
-        // Non-key events (resize, focus, …) simply fall through to a redraw.
         if event::poll(Duration::from_millis(500))?
             && let Event::Key(key) = event::read()?
             && app.on_key(key)
         {
             return Ok(());
         }
-        // Every iteration — not only on poll timeout — so sustained input
-        // (held-key auto-repeat, a long paste) can never starve the liveness
-        // stamp into REPLACE territory or hold back the debounced autosave.
-        // Both self-throttle, so this is cheap.
-        app.heartbeat();
         app.maybe_flush();
     }
-}
-
-fn read_stdin() -> std::io::Result<String> {
-    let mut buf = String::new();
-    std::io::stdin().read_to_string(&mut buf)?;
-    Ok(buf)
 }
