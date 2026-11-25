@@ -1,6 +1,7 @@
 // Adapted from herdr-command-shelf (MIT, Alex Arthurs).
 
 use anyhow::{Context, Result, ensure};
+use serde::Deserialize;
 use std::{
     fs,
     io::{ErrorKind, Write},
@@ -8,7 +9,7 @@ use std::{
     process::Command,
 };
 use tempfile::NamedTempFile;
-use toml::Value;
+use toml::{Spanned, Value};
 
 const KEY: &str = "prefix+f4";
 const ACTION: &str = "herdr-notes.open-notes";
@@ -24,6 +25,46 @@ fn same_chord(a: &str, b: &str) -> bool {
     }
     parts(a) == parts(b)
 }
+fn migrate_binding(original: &str) -> Result<String> {
+    #[derive(Deserialize)]
+    struct Config {
+        keys: Option<Keys>,
+    }
+
+    #[derive(Deserialize)]
+    struct Keys {
+        #[serde(default)]
+        command: Vec<Binding>,
+    }
+
+    #[derive(Deserialize)]
+    struct Binding {
+        #[serde(rename = "type")]
+        kind: Option<String>,
+        command: Option<Spanned<String>>,
+    }
+
+    let input = original.trim_start_matches('\u{feff}');
+    let offset = original.len() - input.len();
+    let config: Config = toml::from_str(input)?;
+    let mut updated = original.to_owned();
+    if let Some(keys) = config.keys {
+        for binding in keys.command.into_iter().rev() {
+            if binding.kind.as_deref() == Some("plugin_action")
+                && let Some(command) = binding.command
+                && command.get_ref() == "herdr-notes.open-notes-windows"
+            {
+                let span = command.span();
+                updated.replace_range(
+                    offset + span.start..offset + span.end,
+                    &format!("\"{ACTION}\""),
+                );
+            }
+        }
+    }
+    Ok(updated)
+}
+
 fn additions(original: &str) -> Result<String> {
     let doc = original
         .trim_start_matches('\u{feff}')
@@ -36,10 +77,7 @@ fn additions(original: &str) -> Result<String> {
         .unwrap_or_default();
     if let Some(binding) = commands.iter().find(|entry| {
         entry.get("type").and_then(Value::as_str) == Some("plugin_action")
-            && matches!(
-                entry.get("command").and_then(Value::as_str),
-                Some(ACTION | "herdr-notes.open-notes-windows")
-            )
+            && entry.get("command").and_then(Value::as_str) == Some(ACTION)
             && entry
                 .get("key")
                 .and_then(Value::as_str)
@@ -117,11 +155,11 @@ pub fn install() -> Result<()> {
     lock.lock()?;
     let before = read(&path)?;
     let original = before.as_deref().unwrap_or_default();
-    let extra = additions(original)?;
-    if !extra.is_empty() {
+    let mut updated = migrate_binding(original)?;
+    updated.push_str(&additions(&updated)?);
+    if updated != original {
         let mut candidate = NamedTempFile::new_in(parent)?;
-        candidate.write_all(original.as_bytes())?;
-        candidate.write_all(extra.as_bytes())?;
+        candidate.write_all(updated.as_bytes())?;
         candidate.flush()?;
         checked(
             Command::new(&bin)
@@ -136,7 +174,7 @@ pub fn install() -> Result<()> {
             "Herdr config changed during installation. Run the action again."
         );
         candidate.persist(&path)?;
-        println!("Added missing shortcuts to {}", path.display());
+        println!("Updated Notes shortcuts in {}", path.display());
     } else {
         checked(Command::new(&bin).args(["config", "check"]))?;
     }
@@ -162,7 +200,14 @@ mod tests {
             .replace(KEY, "ctrl+alt+n")
             .replace(ACTION, "herdr-notes.open-notes-windows")
             .replace('\n', "\r\n");
-        assert_eq!(additions(&old)?, binding.replace('\n', "\r\n"));
+        let migrated = migrate_binding(&old)?;
+        assert_eq!(
+            migrated,
+            old.replace("herdr-notes.open-notes-windows", ACTION)
+        );
+        assert_eq!(additions(&migrated)?, binding.replace('\n', "\r\n"));
+        let custom = old.replace("ctrl+alt+n", "prefix+f9");
+        assert!(additions(&migrate_binding(&custom)?)?.is_empty());
         assert!(additions("[keys").is_err());
         Ok(())
     }

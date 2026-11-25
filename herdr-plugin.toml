@@ -28,11 +28,3 @@ id = "open-notes"
 title = "Open Notes in this shell"
 contexts = ["pane"]
 command = ["./target/release/herdr-notes", "--open"]
-
-# Keep existing Windows bindings working after the upgrade.
-[[actions]]
-id = "open-notes-windows"
-title = "Open Notes in this shell (legacy Windows binding)"
-platforms = ["windows"]
-contexts = ["pane"]
-command = ["./target/release/herdr-notes", "--open"]

@@ -49,8 +49,9 @@ when its server restarts. Quitting with **q** clears that pane’s saved placeme
 
 The keybinding installer preserves existing assignments, validates the config
 and reloads Herdr. It reports a conflict in the plugin log if **prefix then F4**
-is already assigned. You can change the shortcut in Herdr’s `config.toml`. An
-existing Ctrl+Alt+N binding also opens Notes in the selected shell.
+is already assigned. You can change the shortcut in Herdr’s `config.toml`. Run
+the installer after upgrading to update older Windows bindings while keeping
+their assigned shortcuts.
 
 You can also run **Install Notes key bindings** or **Open Notes in this shell**
 from Herdr’s plugin actions.
