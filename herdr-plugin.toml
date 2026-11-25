@@ -1,20 +1,8 @@
-# Manifest for herdr-notes — a persistent markdown notes pane.
-#
-# Cross-platform notes (same findings as herdr-sidebar; see CLAUDE.md):
-#  - Action ids must be GLOBALLY unique across platforms, so the Windows
-#    launcher uses a `-windows`-suffixed id; both gate with `platforms`.
-#  - herdr can NOT spawn a relative [[panes]] command on Windows (it resolves
-#    the program against herdr's own directory -> ERROR_PATH_NOT_FOUND), so
-#    the [[panes]] entry below serves linux/macos only; Windows launches run
-#    the exe BY ABSOLUTE PATH via `pane split` + `pane run`.
-#  - Launchers dock Notes on the RIGHT edge: split the tab's rightmost pane
-#    right; `--ratio` is the ORIGINAL pane's share, so ~0.7 leaves Notes ~0.3.
-
 id = "herdr-notes"
 name = "herdr-notes"
-version = "0.4.1"
-description = "Persistent markdown notes pane: one scrollable note with preview/edit, autosaved across restarts."
-min_herdr_version = "0.9.3"
+version = "1.0.0"
+description = "Persistent Markdown notes for each Herdr tab."
+min_herdr_version = "0.9.5"
 platforms = ["linux", "macos", "windows"]
 
 [[build]]
@@ -26,68 +14,25 @@ platforms = ["linux", "macos"]
 command = ["bash", "scripts/install.sh"]
 
 [[startup]]
-platforms = ["windows"]
-command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
-
-[[startup]]
-platforms = ["linux", "macos"]
-command = ["./target/release/herdr-notes", "--auto-open"]
-
-[[events]]
-on = "workspace.created"
-platforms = ["windows"]
-command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
-
-[[events]]
-on = "workspace.created"
-platforms = ["linux", "macos"]
-command = ["./target/release/herdr-notes", "--auto-open"]
-
-[[events]]
-on = "tab.created"
-platforms = ["windows"]
-command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
-
-[[events]]
-on = "tab.created"
-platforms = ["linux", "macos"]
-command = ["./target/release/herdr-notes", "--auto-open"]
+command = ["./target/release/herdr-notes", "--restore"]
 
 [[actions]]
-id = "apply-settings-windows"
-title = "Apply Notes settings"
-platforms = ["windows"]
-command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path $env:HERDR_PLUGIN_ROOT 'target/release/herdr-notes.exe') --auto-open"]
+id = "install-keybindings"
+title = "Install Notes key bindings"
+description = "Add the Notes shortcut and reload Herdr configuration."
+contexts = ["global", "workspace", "pane"]
+command = ["./target/release/herdr-notes", "--install-keybindings"]
 
-[[actions]]
-id = "apply-settings"
-title = "Apply Notes settings"
-platforms = ["linux", "macos"]
-command = ["./target/release/herdr-notes", "--auto-open"]
-
-# Declarative pane entry — usable on linux/macos (`plugin pane open`) and as
-# the unix launcher's fallback. Unspawnable on Windows (relative command).
-[[panes]]
-id = "notes"
-title = "Notes"
-placement = "split"
-command = ["./target/release/herdr-notes"]
-
-# Toggle the notes pane: open right-docked / save and close if open /
-# replace if the heartbeat is stale.
 [[actions]]
 id = "open-notes"
-platforms = ["linux", "macos"]
-title = "Toggle notes"
-description = "Toggle the tab notes pane; save and close it if already open."
-command = ["bash", "scripts/open-notes.sh"]
+title = "Open Notes in this shell"
+contexts = ["pane"]
+command = ["./target/release/herdr-notes", "--open"]
 
+# Keep existing Windows bindings working after the upgrade.
 [[actions]]
 id = "open-notes-windows"
+title = "Open Notes in this shell (legacy Windows binding)"
 platforms = ["windows"]
-title = "Toggle notes"
-description = "Toggle the tab notes pane; save and close it if already open."
-command = [
-  "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-  '''$u=New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding=$u; $OutputEncoding=$u; $b=$env:HERDR_BIN_PATH; if(-not $b){$b='herdr'}; $p=((& $b plugin list --json|ConvertFrom-Json).result.plugins|?{$_.plugin_id -eq 'herdr-notes'}).plugin_root; if($p -and $p.StartsWith('\\?\')){$p=$p.Substring(4)}; & (Join-Path (Join-Path $p 'scripts') 'open-notes.ps1')''',
-]
+contexts = ["pane"]
+command = ["./target/release/herdr-notes", "--open"]

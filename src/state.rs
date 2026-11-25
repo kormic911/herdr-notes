@@ -1,32 +1,7 @@
-//! Persistent note state: one scrollable markdown note PER WORKSPACE plus the
-//! last-active mode, stored as a small JSON file beside herdr's own config
-//! (`%APPDATA%\herdr\notes\<workspace-id>.json` on Windows,
-//! `$XDG_CONFIG_HOME/herdr/…` elsewhere) so the note survives computer
-//! restarts. The key is the stable `HERDR_WORKSPACE_ID` herdr injects into
-//! every managed pane; outside herdr (or on an id unsafe for a filename) the
-//! pane falls back to the legacy single-note `herdr/notes.json`, and the
-//! first workspace to load notes MOVES that legacy file into its own slot.
-//!
-//! Loading is forgiving — a missing, hand-edited, or truncated file falls back
-//! to an empty note and never panics. Saving is atomic (temp file + rename)
-//! and best-effort: the pane keeps working for the session if persist fails.
+//! Persistent note text and editor mode keyed by Herdr tab, with migration
+//! from the original workspace and single-note storage formats.
 
 use std::path::{Path, PathBuf};
-
-/// Pane label the launcher assigns and the heartbeat re-asserts as the title.
-pub const PANE_LABEL: &str = "Notes";
-
-/// Source id for `pane.report_metadata`; its token marks a pane as the Notes
-/// pane and doubles as the liveness heartbeat.
-pub const METADATA_SOURCE: &str = "herdr-notes";
-
-/// Unix seconds now — the heartbeat clock for the pane identity token.
-pub fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Mode {
@@ -93,10 +68,7 @@ fn workspace_env() -> Option<String> {
     std::env::var("HERDR_WORKSPACE_ID").ok().filter(|id| !id.is_empty())
 }
 
-/// True when the workspace id is safe to embed in a filename. Stricter than
-/// launch.rs's flag-safe check (which also admits `:` `.` `_` `-`): real ids
-/// are plain alphanumeric ("w6"), and anything else — separators, dots,
-/// anything path-traversal-shaped — falls back to the legacy path instead.
+/// Herdr workspace IDs are alphanumeric. Other IDs use the legacy note path.
 fn is_filename_safe(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric())
 }
@@ -107,14 +79,7 @@ fn legacy_path_in(base: &Path) -> PathBuf {
     base.join("herdr").join("notes.json")
 }
 
-/// The note-FILE identity of a workspace id: `Some(key)` when the id gets its
-/// own per-workspace file, `None` when it falls back to the shared legacy
-/// `notes.json`. Panes whose keys are EQUAL load and save the SAME file.
-/// This is the identity the launcher's duplicate-instance guard (launch.rs)
-/// compares — never raw workspace ids — so the guard can't drift from the
-/// on-disk layout: unsafe/missing ids all coarsen to one legacy file, and on
-/// Windows ASCII case is folded because NTFS filenames are case-insensitive
-/// ("W6.json" and "w6.json" are one file).
+/// Use a portable workspace filename for workspace-note migration.
 pub fn note_key(workspace_id: Option<&str>) -> Option<String> {
     let id = workspace_id.filter(|id| is_filename_safe(id))?;
     #[cfg(windows)]
@@ -159,27 +124,7 @@ fn load_tab(dir: &Path, workspace: Option<&str>, key: &str) -> Note {
     read_note(&path)
 }
 
-pub fn closed_path(key: &str) -> Option<PathBuf> {
-    let dir = std::env::var_os("HERDR_PLUGIN_STATE_DIR")?;
-    Some(PathBuf::from(dir).join(format!("closed-{key}")))
-}
-
-pub fn set_closed(closed: bool) -> std::io::Result<()> {
-    let Some(path) = current_key().and_then(|key| closed_path(&key)) else { return Ok(()); };
-    if closed {
-        std::fs::create_dir_all(path.parent().unwrap())?;
-        std::fs::write(path, "")
-    } else {
-        match std::fs::remove_file(path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
-            _ => Ok(())
-        }
-    }
-}
-
-/// Pure path selection: `<base>/herdr/notes/<note-key>.json` for a
-/// filename-safe id, the legacy `<base>/herdr/notes.json` otherwise.
-/// Built from [`note_key`] so path identity and guard identity always agree.
+/// Select the tab, workspace, or legacy note in the config directory.
 fn state_path_in(base: &Path, workspace_id: Option<&str>) -> PathBuf {
     match note_key(workspace_id) {
         Some(key) => base.join("herdr").join("notes").join(format!("{key}.json")),
@@ -203,6 +148,11 @@ pub fn state_path() -> Option<PathBuf> {
         StoreBase::PluginState(dir) => state_dir_path(&dir, ws.as_deref()),
         StoreBase::Config(base) => state_path_in(&base, ws.as_deref()),
     })
+}
+
+pub fn tab_note(root: &Path, workspace: &str, tab: &str) -> Option<(Note, PathBuf)> {
+    let key = tab_key(tab)?;
+    Some((load_tab(root, Some(workspace), &key), root.join(format!("{key}.json"))))
 }
 
 pub fn load() -> Note {
@@ -295,8 +245,7 @@ pub fn to_json(note: &Note) -> String {
 /// fsync BEFORE the rename matters: without it a crash or power loss can make
 /// the rename durable ahead of the data, leaving an empty/truncated file the
 /// forgiving loader would silently turn into an empty note.
-pub fn save(note: &Note) {
-    let Some(path) = state_path() else { return };
+pub fn save(path: &Path, note: &Note) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -307,7 +256,7 @@ pub fn save(note: &Note) {
         f.sync_all()
     });
     if written.is_ok() {
-        let _ = std::fs::rename(&tmp, &path);
+        let _ = std::fs::rename(&tmp, path);
     }
 }
 
